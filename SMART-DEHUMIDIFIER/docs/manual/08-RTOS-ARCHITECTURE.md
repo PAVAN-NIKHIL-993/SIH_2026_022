@@ -94,9 +94,8 @@ core0: web:     requests served continuously; WiFi/lwIP callbacks fly by
 
 ## Verification status
 
-Mode 0 (the default) is compiled for real by CI on every push — both
-variants, arduino-esp32 core 3.3.12 (`scripts/compile-sketches.sh`).
-Mode 1 was last syntax-checked against arduino-esp32 2.0.17
-(`-DDRYER_RTOS=1`); build it with the same script after setting
-`DRYER_RTOS 1` in `config.h`. Behavioural parity (state machine, beeps, relay, history) follows
+Both modes are compiled for real by CI on every push against
+arduino-esp32 core 3.3.12 (`scripts/compile-sketches.sh`): mode 0 (the
+default) for the classic ESP32 and the S3, mode 1 for the S3
+(`-DDRYER_RTOS=1` via `compiler.cpp.extra_flags`). Behavioural parity (state machine, beeps, relay, history) follows
 from sharing the same modules — only scheduling differs.
