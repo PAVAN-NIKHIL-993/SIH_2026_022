@@ -14,22 +14,22 @@ jobs:
         with: { python-version: '3.x' }
       - name: Regenerate sketches (both variants) + online UI
         run: |
-          cd smart-dryer
+          cd smart-dehumidifier
           node tools/single-file/assemble.js
           node tools/single-file/assemble.js s3
           node tools/online/sync-online.js
       - name: String + printf scans
         run: |
-          cd smart-dryer
-          python3 tools/verify_strings.py arduino-ide/smart-dryer-single-file/smart-dryer-single-file.ino arduino-ide/smart-dryer-s3-single-file/smart-dryer-s3-single-file.ino src/*.cpp src/*.h variants/esp32-s3/config-s3.h
-          python3 tools/verify_strings.py --printf arduino-ide/smart-dryer-single-file/smart-dryer-single-file.ino arduino-ide/smart-dryer-s3-single-file/smart-dryer-s3-single-file.ino src/*.cpp
+          cd smart-dehumidifier
+          python3 tools/verify_strings.py arduino-ide/smart-dehumidifier-single-file/smart-dehumidifier-single-file.ino arduino-ide/smart-dehumidifier-s3-single-file/smart-dehumidifier-s3-single-file.ino src/*.cpp src/*.h variants/esp32-s3/config-s3.h
+          python3 tools/verify_strings.py --printf arduino-ide/smart-dehumidifier-single-file/smart-dehumidifier-single-file.ino arduino-ide/smart-dehumidifier-s3-single-file/smart-dehumidifier-s3-single-file.ino src/*.cpp
       - name: UI test suites
         run: |
-          cd smart-dryer/tools/ui-test
+          cd smart-dehumidifier/tools/ui-test
           npm install --no-audit --no-fund
           node ui-test.js
           node online-test.js
       - name: Generated files must be committed in sync
         run: |
-          cd smart-dryer
+          cd smart-dehumidifier
           git diff --exit-code -- arduino-ide docs/index.html

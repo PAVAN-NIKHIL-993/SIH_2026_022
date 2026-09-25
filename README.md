@@ -6,7 +6,7 @@ press Start, walk away — it holds the temperature, vents the humidity,
 weighs the batch, protects itself, and remembers every cycle.
 
 <p>
-<img src="smart-dryer/media/pillar-concept.png" alt="Pillar concept render" width="340">
+<img src="smart-dehumidifier/media/pillar-concept.png" alt="Pillar concept render" width="340">
 </p>
 
 *Firmware v2.0 · single-file Arduino sketch · zero external libraries ·
@@ -128,7 +128,7 @@ POWER-ON ──► 🔒 START LOCKED ──► calibrate scale (known weight) �
 (M+/M−, 0.32 Ω) · battery → L298N +12 V (fans) · battery → 5 V buck (set
 5.0 V first!) → ESP32. All grounds common at one star point.
 
-### Classic ESP32 DevKit V1 (`smart-dryer-single-file.ino`)
+### Classic ESP32 DevKit V1 (`smart-dehumidifier-single-file.ino`)
 
 | GPIO | Function | | GPIO | Function |
 |---|---|---|---|---|
@@ -145,7 +145,7 @@ POWER-ON ──► 🔒 START LOCKED ──► calibrate scale (known weight) �
 *\*Display shares the relay/buzzer pins on the classic build —
 `DISPLAY_ENABLED 0` frees them. The S3 variant has no such trade-offs.*
 
-### ESP32-S3 (`smart-dryer-s3-single-file.ino` — recommended)
+### ESP32-S3 (`smart-dehumidifier-s3-single-file.ino` — recommended)
 
 | GPIO | Function | | GPIO | Function |
 |---|---|---|---|---|
@@ -166,13 +166,13 @@ AHT10 0x38) · display = ILI9488 3.5" SPI, colours wrong → MADCTL/INVON
 note in config · scale cells OUTSIDE the hot chamber, HX711 in the control
 bay · AHT10 #2 in the cool return path for >85 °C recipes · full wire
 schedule with gauges: **manual 10** · every component × pin in one table:
-**[`docs/PIN-MAP.md`](smart-dryer/docs/PIN-MAP.md)**.
+**[`docs/PIN-MAP.md`](smart-dehumidifier/docs/PIN-MAP.md)**.
 
 ## 6. Every parameter
 
 All runtime parameters are on the website **Parameters** page (one click
 resets everything to factory); ranges, effects and cautions:
-**[`smart-dryer/docs/PARAMETERS.md`](smart-dryer/docs/PARAMETERS.md)**.
+**[`smart-dehumidifier/docs/PARAMETERS.md`](smart-dehumidifier/docs/PARAMETERS.md)**.
 
 | Group | Parameters (default) |
 |---|---|
@@ -231,14 +231,14 @@ current (shunt), display backlight — covered by the weekly check.*
 
 | Step | Doc |
 |---|---|
-| Shopping list with costs | `smart-dryer/production/01-BOM-FULL.csv` |
-| **Printable components checklist (tick boxes, buy order)** | `smart-dryer/production/06-COMPONENTS-CHECKLIST.md` |
-| **Full design as diagrams** (9:16 draw.io: system + workflow + code) | `smart-dryer/docs/design-workflow.drawio` |
-| **Every inch**: dimensions, cut list, coil forming, sensor placement, wire schedule, assembly order | `smart-dryer/docs/manual/10-FULL-BUILD-EVERY-INCH.md` |
+| Shopping list with costs | `smart-dehumidifier/production/01-BOM-FULL.csv` |
+| **Printable components checklist (tick boxes, buy order)** | `smart-dehumidifier/production/06-COMPONENTS-CHECKLIST.md` |
+| **Full design as diagrams** (9:16 draw.io: system + workflow + code) | `smart-dehumidifier/docs/design-workflow.drawio` |
+| **Every inch**: dimensions, cut list, coil forming, sensor placement, wire schedule, assembly order | `smart-dehumidifier/docs/manual/10-FULL-BUILD-EVERY-INCH.md` |
 | Electrical quick guide + module wiring | manual 02 (§4.7 display · §4.8 keypad · §4.9 scale · §4.10 door) |
-| Printable sign-off sheet | `smart-dryer/production/02-ASSEMBLY-CHECKLIST.md` |
-| 16-point QC test (pass criteria) | `smart-dryer/production/03-QC-TEST-PROCEDURE.md` |
-| Product datasheet | `smart-dryer/docs/datasheet.md` |
+| Printable sign-off sheet | `smart-dehumidifier/production/02-ASSEMBLY-CHECKLIST.md` |
+| 16-point QC test (pass criteria) | `smart-dehumidifier/production/03-QC-TEST-PROCEDURE.md` |
+| Product datasheet | `smart-dehumidifier/docs/datasheet.md` |
 
 Pillar layout: battery bay in the base (ventilated, sealed bulkhead),
 controller bay at the top, chamber between — nothing outside except the panel.
@@ -247,8 +247,8 @@ controller bay at the top, chamber between — nothing outside except the panel.
 
 **First flash (the only USB one):**
 1. Arduino IDE 2 → Boards Manager → *esp32 by Espressif*.
-2. Open the sketch: classic → `smart-dryer-single-file.ino` (board
-   **ESP32 Dev Module**) · S3 → `smart-dryer-s3-single-file.ino` (board
+2. Open the sketch: classic → `smart-dehumidifier-single-file.ino` (board
+   **ESP32 Dev Module**) · S3 → `smart-dehumidifier-s3-single-file.ino` (board
    **ESP32S3 Dev Module**, **USB CDC On Boot: Enabled**).
 3. Upload (hold BOOT if it hangs on "Connecting…"). Serial monitor 115200.
 4. Join WiFi **AgarbattiDryer** / **dryer1234** → http://192.168.4.1.
@@ -258,7 +258,7 @@ controller bay at the top, chamber between — nothing outside except the panel.
 1. **Website** → ⬆ Firmware update → pick the exported `.bin` → progress
    bar → the pillar reboots itself (refused while a cycle runs).
 2. **Arduino IDE direct** (no .bin export): join WiFi **AgarbattiDryer**
-   from the PC → Tools → Port → **smart-dryer at 192.168.4.1** → Upload.
+   from the PC → Tools → Port → **smart-dehumidifier at 192.168.4.1** → Upload.
 
 Boot sequence (v2.0.1): every pin starts LOW (unused pads parked safe),
 10 s initialisation + calibration window with the splash, then the supply
@@ -310,10 +310,10 @@ Full symptom→cause→fix table: manual 05.
 ## 13. Repository map
 
 ```
-├── smart-dryer/
+├── smart-dehumidifier/
 │   ├── arduino-ide/            THE FIRMWARE (single file, zero libraries)
-│   │     smart-dryer-single-file.ino        classic ESP32
-│   │     smart-dryer-s3-single-file.ino     ESP32-S3 (recommended)
+│   │     smart-dehumidifier-single-file.ino        classic ESP32
+│   │     smart-dehumidifier-s3-single-file.ino     ESP32-S3 (recommended)
 │   │     sensor-tests/                      per-sensor test suite (AHT10, DHT,
 │   │                                        scale, door, battery, supply,
 │   │                                        buttons, keypad, EEPROM) - each
@@ -333,7 +333,7 @@ Full symptom→cause→fix table: manual 05.
 └── CONTRIBUTING · SECURITY · CHANGELOG · LICENSE (MIT)
 ```
 
-Deep-dive index: `smart-dryer/docs/manual/00-START-HERE.md`.
+Deep-dive index: `smart-dehumidifier/docs/manual/00-START-HERE.md`.
 
 ## 14. Roadmap
 
@@ -447,7 +447,7 @@ POWER-ON ──► 🔒 START LOCKED ──► calibrate scale (known weight) �
 (M+/M−, 0.32 Ω) · battery → L298N +12 V (fans) · battery → 5 V buck (set
 5.0 V first!) → ESP32. All grounds common at one star point.
 
-### Classic ESP32 DevKit V1 (`smart-dryer-single-file.ino`)
+### Classic ESP32 DevKit V1 (`smart-dehumidifier-single-file.ino`)
 
 | GPIO | Function | | GPIO | Function |
 |---|---|---|---|---|
@@ -464,7 +464,7 @@ POWER-ON ──► 🔒 START LOCKED ──► calibrate scale (known weight) �
 *\*Display shares the relay/buzzer pins on the classic build —
 `DISPLAY_ENABLED 0` frees them. The S3 variant has no such trade-offs.*
 
-### ESP32-S3 (`smart-dryer-s3-single-file.ino` — recommended)
+### ESP32-S3 (`smart-dehumidifier-s3-single-file.ino` — recommended)
 
 | GPIO | Function | | GPIO | Function |
 |---|---|---|---|---|
@@ -485,13 +485,13 @@ AHT10 0x38) · display = ILI9488 3.5" SPI, colours wrong → MADCTL/INVON
 note in config · scale cells OUTSIDE the hot chamber, HX711 in the control
 bay · AHT10 #2 in the cool return path for >85 °C recipes · full wire
 schedule with gauges: **manual 10** · every component × pin in one table:
-**[`docs/PIN-MAP.md`](smart-dryer/docs/PIN-MAP.md)**.
+**[`docs/PIN-MAP.md`](smart-dehumidifier/docs/PIN-MAP.md)**.
 
 ## 6. Every parameter
 
 All runtime parameters are on the website **Parameters** page (one click
 resets everything to factory); ranges, effects and cautions:
-**[`smart-dryer/docs/PARAMETERS.md`](smart-dryer/docs/PARAMETERS.md)**.
+**[`smart-dehumidifier/docs/PARAMETERS.md`](smart-dehumidifier/docs/PARAMETERS.md)**.
 
 | Group | Parameters (default) |
 |---|---|
@@ -550,14 +550,14 @@ current (shunt), display backlight — covered by the weekly check.*
 
 | Step | Doc |
 |---|---|
-| Shopping list with costs | `smart-dryer/production/01-BOM-FULL.csv` |
-| **Printable components checklist (tick boxes, buy order)** | `smart-dryer/production/06-COMPONENTS-CHECKLIST.md` |
-| **Full design as diagrams** (9:16 draw.io: system + workflow + code) | `smart-dryer/docs/design-workflow.drawio` |
-| **Every inch**: dimensions, cut list, coil forming, sensor placement, wire schedule, assembly order | `smart-dryer/docs/manual/10-FULL-BUILD-EVERY-INCH.md` |
+| Shopping list with costs | `smart-dehumidifier/production/01-BOM-FULL.csv` |
+| **Printable components checklist (tick boxes, buy order)** | `smart-dehumidifier/production/06-COMPONENTS-CHECKLIST.md` |
+| **Full design as diagrams** (9:16 draw.io: system + workflow + code) | `smart-dehumidifier/docs/design-workflow.drawio` |
+| **Every inch**: dimensions, cut list, coil forming, sensor placement, wire schedule, assembly order | `smart-dehumidifier/docs/manual/10-FULL-BUILD-EVERY-INCH.md` |
 | Electrical quick guide + module wiring | manual 02 (§4.7 display · §4.8 keypad · §4.9 scale · §4.10 door) |
-| Printable sign-off sheet | `smart-dryer/production/02-ASSEMBLY-CHECKLIST.md` |
-| 16-point QC test (pass criteria) | `smart-dryer/production/03-QC-TEST-PROCEDURE.md` |
-| Product datasheet | `smart-dryer/docs/datasheet.md` |
+| Printable sign-off sheet | `smart-dehumidifier/production/02-ASSEMBLY-CHECKLIST.md` |
+| 16-point QC test (pass criteria) | `smart-dehumidifier/production/03-QC-TEST-PROCEDURE.md` |
+| Product datasheet | `smart-dehumidifier/docs/datasheet.md` |
 
 Pillar layout: battery bay in the base (ventilated, sealed bulkhead),
 controller bay at the top, chamber between — nothing outside except the panel.
@@ -566,8 +566,8 @@ controller bay at the top, chamber between — nothing outside except the panel.
 
 **First flash (the only USB one):**
 1. Arduino IDE 2 → Boards Manager → *esp32 by Espressif*.
-2. Open the sketch: classic → `smart-dryer-single-file.ino` (board
-   **ESP32 Dev Module**) · S3 → `smart-dryer-s3-single-file.ino` (board
+2. Open the sketch: classic → `smart-dehumidifier-single-file.ino` (board
+   **ESP32 Dev Module**) · S3 → `smart-dehumidifier-s3-single-file.ino` (board
    **ESP32S3 Dev Module**, **USB CDC On Boot: Enabled**).
 3. Upload (hold BOOT if it hangs on "Connecting…"). Serial monitor 115200.
 4. Join WiFi **AgarbattiDryer** / **dryer1234** → http://192.168.4.1.
@@ -577,7 +577,7 @@ controller bay at the top, chamber between — nothing outside except the panel.
 1. **Website** → ⬆ Firmware update → pick the exported `.bin` → progress
    bar → the pillar reboots itself (refused while a cycle runs).
 2. **Arduino IDE direct** (no .bin export): join WiFi **AgarbattiDryer**
-   from the PC → Tools → Port → **smart-dryer at 192.168.4.1** → Upload.
+   from the PC → Tools → Port → **smart-dehumidifier at 192.168.4.1** → Upload.
 
 Boot sequence (v2.0.1): every pin starts LOW (unused pads parked safe),
 10 s initialisation + calibration window with the splash, then the supply
@@ -629,10 +629,10 @@ Full symptom→cause→fix table: manual 05.
 ## 13. Repository map
 
 ```
-├── smart-dryer/
+├── smart-dehumidifier/
 │   ├── arduino-ide/            THE FIRMWARE (single file, zero libraries)
-│   │     smart-dryer-single-file.ino        classic ESP32
-│   │     smart-dryer-s3-single-file.ino     ESP32-S3 (recommended)
+│   │     smart-dehumidifier-single-file.ino        classic ESP32
+│   │     smart-dehumidifier-s3-single-file.ino     ESP32-S3 (recommended)
 │   ├── src/ + platformio.ini   shared logic (PlatformIO layout)
 │   ├── variants/esp32-s3/      S3 pin map + config + why-S3
 │   ├── docs/                   datasheet · PARAMETERS · manuals 00–10 · wiring.svg
@@ -648,7 +648,7 @@ Full symptom→cause→fix table: manual 05.
 └── CONTRIBUTING · SECURITY · CHANGELOG · LICENSE (MIT)
 ```
 
-Deep-dive index: `smart-dryer/docs/manual/00-START-HERE.md`.
+Deep-dive index: `smart-dehumidifier/docs/manual/00-START-HERE.md`.
 
 ## 14. Roadmap
 
