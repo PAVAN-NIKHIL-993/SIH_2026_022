@@ -6,7 +6,8 @@
 #
 # Usage (from anywhere in the repo; needs arduino-cli on PATH -
 # https://arduino.github.io/arduino-cli/latest/installation/):
-#   bash scripts/compile-sketches.sh esp32  # firmware classic + S3, S3 bench sketches
+#   bash scripts/compile-sketches.sh esp32  # firmware classic + S3 (+ S3 in DRYER_RTOS=1
+#                                           # mode), S3 bench sketches
 #   bash scripts/compile-sketches.sh avr    # UNO display bridge + display test
 #   bash scripts/compile-sketches.sh        # both groups
 #   bash scripts/compile-sketches.sh esp32 --setup-only   # install, no build
@@ -66,14 +67,15 @@ step() {    # step <title> <cmd...> : run a setup command, stop on failure
 }
 
 passed=(); failed=()
-build() {   # build <fqbn> <sketch-dir>
-  gh_group "compile ${2}  [${1}]"
-  local log; log="$(mktemp)"
-  if acli compile --fqbn "$1" --warnings default "$2" 2>&1 | tee "$log"; then
-    gh_endgroup; passed+=("$2")
+build() {   # build <fqbn> <sketch-dir> [build-property]
+  local prop="${3:-}" label="$2" log; log="$(mktemp)"
+  if [ -n "$prop" ]; then prop="${prop#*=}"; label="$2  (${prop#-D})"; fi   # "(DRYER_RTOS=1)"
+  gh_group "compile ${label}  [${1}]"
+  if acli compile --fqbn "$1" --warnings default ${3:+--build-property "$3"} "$2" 2>&1 | tee "$log"; then
+    gh_endgroup; passed+=("$label")
   else
-    gh_endgroup; failed+=("$2")
-    annotate_fail "compile failed" "$2  [$1]" "$log"
+    gh_endgroup; failed+=("$label")
+    annotate_fail "compile failed" "$label  [$1]" "$log"
   fi
   rm -f "$log"
 }
@@ -87,6 +89,10 @@ fi
 if [ "$group" != avr ] && ! $setup_only; then
   build "$FQBN_CLASSIC" arduino-ide/SMART-DEHUMIDIFIER-single-file
   build "$FQBN_S3"      arduino-ide/SMART-DEHUMIDIFIER-s3-single-file
+  # the optional FreeRTOS build mode (config.h: DRYER_RTOS, #ifndef-guarded).
+  # compiler.cpp.extra_flags is empty in the core; build.extra_flags is not
+  # (it carries the S3 USB settings), so it must not be overridden
+  build "$FQBN_S3"      arduino-ide/SMART-DEHUMIDIFIER-s3-single-file "compiler.cpp.extra_flags=-DDRYER_RTOS=1"
   build "$FQBN_S3"      arduino-ide/board-test-s3
   for d in arduino-ide/sensor-tests/*/; do build "$FQBN_S3" "${d%/}"; done
 fi
