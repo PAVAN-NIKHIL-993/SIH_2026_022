@@ -3670,6 +3670,19 @@ const char *statusText() {
 
 }  // namespace rtc
 
+#else   // !RTC_ENABLED - no DS1302 on this build (classic variant)
+
+// Same API as no-ops - the contract rtc.h documents - so callers such as
+// the serial console's `rtc` / `rtcset` commands need no #if of their own
+// (they failed to link on the classic build before v2.0.22).
+namespace rtc {
+bool begin() { return false; }
+bool present() { return false; }
+bool readTime(time_t *outEp) { (void)outEp; return false; }
+void writeNow() {}
+const char *statusText() { return "no DS1302 on this build (clock = phone sync + NVS)"; }
+}  // namespace rtc
+
 #endif  // RTC_ENABLED
 
 /* ==========================  src/keypad.cpp  ========================== */
@@ -7627,7 +7640,7 @@ void loop() {
 
 #endif  // DRYER_RTOS
 /* ==== END OF FILE ====
- * total lines (wc -l): 7633   non-blank lines: 7008
+ * total lines (wc -l): 7646   non-blank lines: 7019
  * build 2026-09-25 - if these numbers differ from what you see,
  * you are looking at an older copy; regenerate: node tools/single-file/assemble.js
  */
