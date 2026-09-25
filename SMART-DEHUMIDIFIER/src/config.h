@@ -298,14 +298,13 @@
 #define PIN_TXDISP_TX   -1
 #define TXDISP_BAUD     9600
 
-// ---- DS1302 RTC: NOT fitted on the classic build (v2.0.21) -------------
-// The classic 30-pin devkit has no free 3-wire slot; the date/time there
-// stays phone-sync + NVS. The S3 variant carries the DS1302 (RST 40 /
-// SCLK 42 / I-O 47) - see variants/esp32-s3/config-s3.h.
-#define RTC_ENABLED    0
-#define PIN_RTC_RST    -1
-#define PIN_RTC_SCLK   -1
-#define PIN_RTC_IO     -1
+// ---- DS1307 RTC on the I2C0 bus (v2.0.23) ------------------------------
+// Same chip + driver as the S3 build, no GPIO of its own: SDA -> GPIO 21,
+// SCL -> GPIO 22 (shared with AHT10 #1 + keypad), VCC -> 5V, GND -> GND.
+// Remove the module's 5 V pull-ups (R2 + R3 on "Tiny RTC" boards) or use a
+// level shifter. Auto-detected - no chip = the phone-sync + NVS clock.
+#define RTC_ENABLED    1
+#define RTC_I2C_ADDR   0x68        // DS1307 (and DS3231) - fixed
 
 // ---- Weigh scale: 2 x half-bridge load cells + HX711 ("dry to weight") -
 // OFF on the classic ESP32: with the display fitted there is NO free

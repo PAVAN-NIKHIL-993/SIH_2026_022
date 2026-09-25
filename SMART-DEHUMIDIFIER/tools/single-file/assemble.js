@@ -82,9 +82,6 @@ const pinRows = [
   ['PIN_DHT22_CHAMBER', 'DHT22 chamber sensor (cool-return path)'],
   ['PIN_DHT11_OUT', 'DHT11 outdoor sensor (shade!)'],
   ['PIN_PIXEL', 'RGB status pixel (on-board WS2812; 48=v1.0 boards, 38=v1.1)'],
-  ['PIN_RTC_RST', 'DS1302 RTC RST (chip enable) - date & time, coin-cell'],
-  ['PIN_RTC_SCLK', 'DS1302 RTC SCLK'],
-  ['PIN_RTC_IO', 'DS1302 RTC data I/O'],
   ['PIN_TFT_SCK', 'ILI9488 TFT SCK'],
   ['PIN_TFT_MOSI', 'ILI9488 TFT MOSI'],
   ['PIN_TFT_CS', 'ILI9488 TFT CS'],
@@ -101,7 +98,6 @@ const gated = {
   PIN_DHT22_CHAMBER: 'DHT_CHAMBER_ENABLED',
   PIN_DHT11_OUT: 'DHT_OUT_ENABLED',
   PIN_PIXEL: 'PIXEL_ENABLED',
-  PIN_RTC_RST: 'RTC_ENABLED', PIN_RTC_SCLK: 'RTC_ENABLED', PIN_RTC_IO: 'RTC_ENABLED',
 };
 let pinRef = '';
 for (const [macro, desc] of pinRows) {
@@ -117,6 +113,7 @@ if (defs.DOOR_ENABLED === 1 && defs.DOOR_LOCK_ENABLED === 0) notes.push('door = 
 if (defs.SUPPLY_RELAYS_ENABLED === 0) notes.push('supply relay not wired - mode shown + opto verified, switching is manual');
 if (defs.BTN_ENABLED === 1) notes.push('BOOT button = start/stop, hold 2 s = power on');
 notes.push(`keypad PCF8574 at 0x${(defs.KEYPAD_ADDR || 0x20).toString(16).toUpperCase()} (never PCF8574A - AHT10 clash)`);
+if (defs.RTC_ENABLED === 1) notes.push(`DS1307 RTC on I2C0 (SDA ${defs.PIN_I2C0_SDA} / SCL ${defs.PIN_I2C0_SCL}) at 0x${(defs.RTC_I2C_ADDR || 0x68).toString(16).toUpperCase()}, VCC 5 V - remove its 5 V pull-ups (R2/R3)`);
 for (const n of notes) pinRef += ` *    NOTE: ${n}\n`;
 
 const banner = `/*

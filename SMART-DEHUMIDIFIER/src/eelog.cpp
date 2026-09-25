@@ -59,6 +59,31 @@ static bool wr(uint16_t a, const uint8_t *b, uint16_t n) {
   return true;
 }
 
+// ---- v2.0.23: is it REALLY 32 kB? ----------------------------------------
+// DS1307 "Tiny RTC" boards carry an AT24C32 (4 kB, 32-byte pages) at the
+// same 0x50. Taken for an AT24C256 it would wrap addresses and page writes
+// and corrupt its own header. A smaller 24Cxx mirrors high addresses onto
+// low ones: write a marker to a spare byte above the last record (0x7FF0 -
+// never used by the layout) and see whether it shows up at the 4/8/16 kB
+// alias. The original byte is put back either way.
+static bool isFull32k() {
+  const uint16_t HI = 0x7FF0;
+  const uint16_t LO[3] = {0x0FF0, 0x1FF0, 0x3FF0};  // aliases on 4/8/16 kB
+  uint8_t hi0, lo0[3];
+  if (!rd(HI, &hi0, 1)) return false;
+  for (uint8_t i = 0; i < 3; i++) if (!rd(LO[i], &lo0[i], 1)) return false;
+  uint8_t m = 0x5A;                             // marker unlike every byte now
+  while (m == hi0 || m == lo0[0] || m == lo0[1] || m == lo0[2]) m++;
+  if (!wr(HI, &m, 1)) return false;
+  bool aliased = false;
+  for (uint8_t i = 0; i < 3; i++) {
+    uint8_t v = 0;
+    if (!rd(LO[i], &v, 1) || v == m) aliased = true;
+  }
+  wr(HI, &hi0, 1);                              // give the byte back
+  return !aliased;
+}
+
 // ---- record pack/unpack (explicit, endian/padding-safe) ----------------
 static uint8_t crc8(const uint8_t *b, uint16_t n) {
   uint8_t c = 0x5A;
@@ -110,6 +135,11 @@ void begin() {
   Wire.beginTransmission(ELOG_ADDR);
   if (Wire.endTransmission() != 0) {
     Serial.println(F("[eelog] AT24C256 not found - long-term registry off"));
+    return;
+  }
+  if (!isFull32k()) {
+    Serial.println(F("[eelog] the EEPROM at 0x50 is smaller than 32 kB (the AT24C32 on a "
+                     "DS1307 board?) - long-term registry off; fit an AT24C256"));
     return;
   }
   uint8_t b[16];

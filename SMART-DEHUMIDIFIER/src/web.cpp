@@ -10,7 +10,7 @@
 #include "supply.h"
 #include "dht.h"
 #include "webui.h"
-#include "rtc.h"       // v2.0.21: mirror every real time set into the DS1302
+#include "rtc.h"       // mirror every real time set into the DS1307 RTC
 #include <WiFi.h>
 #include <LittleFS.h>
 #include <sys/time.h>
@@ -39,8 +39,8 @@ static void clockSave(uint32_t ep) {
   p.end();
 }
 
-// v2.0.21: mirror a real time set into the DS1302 (no-op when absent /
-// classic). The chip then holds the clock across a full power-down.
+// mirror a real time set into the DS1307 (no-op when absent). The chip
+// then holds the clock across a full power-down.
 static void clockToRtc() {
 #if RTC_ENABLED
   rtc::writeNow();

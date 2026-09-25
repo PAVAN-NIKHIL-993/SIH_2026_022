@@ -114,8 +114,9 @@ POWER-ON ──► 🔒 START LOCKED ──► calibrate scale (known weight) �
 - **Door workflow:** limit switch (S3), calibrate→load→ready enforcement,
   mid-cycle open = fault; identical software flow on classic. No solenoid
   lock in this build (v2.0.4).
-- **Time:** phone-synced clock, NVS snapshots every 30 min → survives full
-  battery disconnects (restored-stale, auto-corrected on next visit).
+- **Time:** optional **DS1307 RTC** on the I2C bus (coin cell — the calendar
+  survives a full power-down; auto-detected, v2.0.23) plus the phone-synced
+  clock with NVS snapshots every 30 min as the fallback.
 - **Diagnostics:** E01–E20 fault codes (owner spec) with an ACTIVE/CLEARED fault card on the site, boot self-test `[diag]` block, `[stat]` line every 15 s,
   edge-triggered `[warn]`s, hardware error detection (§8), serial console
   (`help start stop power stat temp time knob defaults tare cal door`).
@@ -316,7 +317,7 @@ Full symptom→cause→fix table: manual 05.
 │   │     SMART-DEHUMIDIFIER-s3-single-file.ino     ESP32-S3 (recommended)
 │   │     sensor-tests/                      per-sensor test suite (AHT10, DHT,
 │   │                                        scale, door, battery, supply,
-│   │                                        buttons, keypad, EEPROM, DS1302
+│   │                                        buttons, keypad, EEPROM, DS1307
 │   │                                        RTC) - each with its own OTA +
 │   │                                        live web page
 │   ├── src/ + platformio.ini   shared logic (PlatformIO layout)
@@ -329,7 +330,7 @@ Full symptom→cause→fix table: manual 05.
 │   ├── compliance/             safety checklist · standards roadmap
 │   ├── media/                  concept render + photo shot-list
 │   ├── tools/                  assembler (2 variants) · verifiers · symbol audit ·
-│   │                           host DS1302 test · UI suites
+│   │                           host DS1307 test · sensor-page JSON test · UI suites
 │   └── scripts/                check-all.sh = one-command release gate ·
 │                               compile-sketches.sh = real arduino-cli build
 ├── .github/workflows/          CI (gate + real compile of all 15 sketches) · Pages deploy

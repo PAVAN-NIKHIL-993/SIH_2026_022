@@ -10,13 +10,13 @@ oversampling), so a PASS here means the sensor will pass in the real build.
 | `aht10-test` | AHT10 chamber temp/RH (raw I2C, 0x38) | #1: 21/22 · #2: 32/33 | 8/9 (one sensor) |
 | `dht-test` | DHT22 chamber + DHT11 outdoor (bit-bang 40-bit frames) | bench override `TEST_DHT_PIN` | DHT22: 10 · DHT11: 41 |
 | `scale-test` | HX711 + load cells (bit-bang, ch A x128) | bench override `TEST_SCALE_CLK/DOUT` (12/34 per config.h) | SCK 1 / DOUT 2 |
-| `door-test` | door limit switch, debounce + edge count | bench override `TEST_DOOR_PIN` | 34 (closed = LOW) |
+| `door-test` | door limit switch, debounce + edge count | bench override `TEST_DOOR_PIN` | 21 (closed = LOW) |
 | `battery-test` | battery divider + ADC1 (16x oversample, gated) | ADC 36 / EN 19 | ADC 4 / EN 5 |
 | `supply-test` | solar toggle + supply optocoupler (read-only) | toggle 27 / opto 35 | toggle 39 / opto 18 |
 | `buttons-test` | BUTTON-1 / BUTTON-2 press durations | 15 / 18 (hold 16) | 15 / 16 (hold 14) |
 | `keypad-test` | PCF8574 backpack + all 16 keys, with menu meanings | 21/22 @ 0x20 | 8/9 @ 0x20 |
 | `eeprom-test` | AT24C256 presence, registry header, write/restore test | 21/22 @ 0x50 | 8/9 @ 0x50 |
-| `rtc-test` | DS1302 date & time (bit-bang, scratch-RAM probe, WP/CH flags) | bench override `PIN_RTC_*` | RST 40 / SCLK 42 / I/O 47 |
+| `rtc-test` | DS1307 date & time on I2C (0x68, CH flag, 12/24 h, set from phone) + I2C bus scan | 21/22 @ 0x68 (VCC 5 V) | 8/9 @ 0x68 (VCC 5 V) |
 
 The board is **detected automatically** — flash the same file on either the
 classic ESP32 or the ESP32-S3 and it uses the right pin map.

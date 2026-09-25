@@ -38,8 +38,8 @@ should ship with. Build: `node tools/single-file/assemble.js s3` →
 | 15 / 16 | BUTTON-1 (master power) / BUTTON-2 (default automation) | | 39 | solar/bypass toggle |
 | 17 | L298N ENB — exhaust fan PWM (direction hard-wired on the module) | | 18 | supply optocoupler OUT |
 | 6 / 7 | supply relay CH1 (solar) / CH2 (bypass) | | 38 | buzzer KY-012 |
-| **40 / 42 / 47** | **DS1302 RTC** RST / SCLK / I-O — date & time on CR2032 (v2.0.21; auto-detected) | | **0** | **BOOT button = start/stop** (on-board) |
-| free | **3, 11** — **GPIO 35/36/37 = PSRAM, never wire** | | 48 | WS2812 status pixel (on-board) |
+| **8 / 9** | + **DS1307 RTC** (0x68) on the same I2C0 — date & time on coin cell (v2.0.23; **VCC 5 V**, 5 V pull-ups removed; auto-detected) | | **0** | **BOOT button = start/stop** (on-board) |
+| free | **3, 11, 40, 42, 47** — **GPIO 35/36/37 = PSRAM, never wire** | | 48 | WS2812 status pixel (on-board) |
 
 **Why 41 and 21 (v2.0.20 remap):** many S3 devkit headers (the pillar's
 included) do NOT break out GPIO 22–34. The outdoor DHT11 therefore moved

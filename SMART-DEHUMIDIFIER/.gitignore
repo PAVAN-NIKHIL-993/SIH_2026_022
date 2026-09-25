@@ -10,6 +10,6 @@ tools/ui-test/package-lock.json
 *.elf
 build/
 
-# host DS1302 test: run.sh copies src/rtc.cpp here and builds a binary
+# host DS1307 test: run.sh copies src/rtc.cpp here and builds a binary
 tools/host-rtc-test/rtc-under-test.cpp
 tools/host-rtc-test/rtctest-build

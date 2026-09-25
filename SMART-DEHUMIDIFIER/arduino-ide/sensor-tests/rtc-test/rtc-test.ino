@@ -1,22 +1,29 @@
 /**
- * DS1302 RTC TEST - Smart Dehumidifier (sensor suite, v2.0.21)
+ * DS1307 RTC TEST - Smart Dehumidifier (sensor suite, v2.0.23)
  * ===================================================================
- * Checks the DS1302 real-time clock with the SAME bit-bang driver the
- * firmware uses (src/rtc.cpp - no RTC library needed): auto-detect
- * (scratch-RAM magic probe), WP/CH flag handling, BCD read, write-back
- * and the local-time <-> epoch conversion.
+ * Checks the DS1307 real-time clock with the SAME I2C driver logic the
+ * firmware uses (src/rtc.cpp - Wire only, no RTC library): detection at
+ * 0x68, CH (clock-halt) flag, BCD + 12/24 h decoding, write-back and the
+ * local-time <-> epoch conversion. Also scans the whole I2C bus and names
+ * what it finds (DS1307, the AT24C32 EEPROM many RTC boards carry, AHT10,
+ * PCF8574 keypad, AT24C256 registry).
  *
- * Wiring (from the dryer build, variants/esp32-s3/config-s3.h):
- *   DS1302 module -> ESP32-S3 :
- *     VCC -> 3V3, GND -> GND, SCLK -> GPIO 40, I/O -> GPIO 42, RST -> GPIO 47
- *     (the module's BZ pin is unused; its CR2032 stays ON the module)
- *   classic ESP32: no DS1302 in the dryer build - to bench-test a spare
- *     module on the classic, set the three pins below (defaults -1 = off)
+ * Wiring (exactly the dryer build - the RTC shares the I2C0 bus):
+ *   DS1307 module -> ESP32-S3 :   VCC -> 5V   GND -> GND
+ *                                 SDA -> GPIO 8   SCL -> GPIO 9
+ *   classic ESP32:                SDA -> GPIO 21  SCL -> GPIO 22
+ *   !! The DS1307 needs 4.5-5.5 V on VCC (at 3.3 V it ignores the bus).
+ *   !! Most DS1307 boards ("Tiny RTC") pull SDA/SCL up to 5 V through
+ *      R2/R3 - ESP32 pins are NOT 5 V tolerant: remove R2 + R3 (or use an
+ *      I2C level shifter). The DS1307 reads 3.3 V logic fine.
+ *   !! Tiny RTC + a plain CR2032: remove its LIR2032 charger (D1, R4, R5)
+ *      and bridge R6 - or keep the rechargeable LIR2032 it came with.
+ *   DS3231 boards (3.3 V-native) use the same registers and pass too.
  *
  * Use:
  *   1. Flash over USB (this single file - only the ESP32 core).
  *   2. Join WiFi "AgarbattiDryer" (password: dryer1234), open
- *      http://192.168.4.1 -> live chip status on your phone.
+ *      http://192.168.4.1 -> live chip status + bus scan on your phone.
  *   3. Press "SET TIME FROM PHONE" -> your browser's clock is written
  *      into the chip; the page then reads it back and shows both.
  *   4. Serial Monitor @ 115200 -> status line + every register.
@@ -26,15 +33,15 @@
  *      straight over WiFi. No USB needed afterwards.
  *
  * Verdict:  PASS = chip detected AND time valid (and settable)
- *            WARN = chip detected, no valid time yet (fresh module -
- *                   press SET TIME, or check the coin cell)
- *            FAIL = no chip on the bus (check VCC/GND/3 wires)
- *            NOT FITTED = pins are -1 (classic bench override unset)
+ *            WARN = chip detected, clock halted / not set yet (fresh
+ *                   module - press SET TIME, or check the coin cell)
+ *            FAIL = nothing answers at 0x68 (VCC 5 V? SDA/SCL swapped?)
  */
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ArduinoOTA.h>
+#include <Wire.h>
 #include <ESPmDNS.h>
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(ESP32S3)
@@ -43,30 +50,27 @@
   #define HW_S3 0
 #endif
 
-// ---- pins ----------------------------------------------------------------
-// S3: EXACTLY the dryer build pins (config-s3.h). Classic: bench override,
-// defaults -1 (dryer build has no RTC fitted on the classic).
+// ---- pins: EXACTLY the dryer build's I2C0 (config-s3.h / config.h) -------
 #if HW_S3
-  #define PIN_RTC_RST    40
-  #define PIN_RTC_SCLK   42
-  #define PIN_RTC_IO     47
+  #define PIN_I2C0_SDA   8
+  #define PIN_I2C0_SCL   9
 #else
-  #define PIN_RTC_RST    (-1)
-  #define PIN_RTC_SCLK   (-1)
-  #define PIN_RTC_IO     (-1)
+  #define PIN_I2C0_SDA   21
+  #define PIN_I2C0_SCL   22
 #endif
+#define RTC_ADDR 0x68
 
-static int16_t tzMinutes = 330;           // default IST; /tz updates it
+static int16_t tzMinutes = 330;           // default IST; /set updates it
 
 #define AP_SSID   "AgarbattiDryer"
 #define AP_PASS   "dryer1234"
 #define AP_CHAN   6
 #define AP_MAXCL  4
 static const char *OTA_HOST  = "rtc-test";
-static const char *TEST_NAME = "DS1302 RTC";
+static const char *TEST_NAME = "DS1307 RTC";
 
 // --------------------------------------------------------------------
-// DS1302 driver - same logic as src/rtc.cpp (v2.0.21)
+// DS1307 driver - same logic as src/rtc.cpp (v2.0.23)
 // --------------------------------------------------------------------
 static long daysSinceEpoch(int y, int mo, int d) {
   int yy = y - (mo <= 2 ? 1 : 0);
@@ -102,97 +106,61 @@ static void epochToCivil(time_t ep, int *y, int *mo, int *d,
 }
 static uint8_t bcd2bin(uint8_t v) { return (uint8_t)((v >> 4) * 10 + (v & 0x0F)); }
 static uint8_t bin2bcd(uint8_t v) { return (uint8_t)(((v / 10) << 4) | (v % 10)); }
+static bool bcdOk(uint8_t v) { return (v & 0x0F) <= 9 && (v >> 4) <= 9; }
 
-static inline void ceHiLo(bool hi) { digitalWrite(PIN_RTC_RST, hi ? HIGH : LOW); }
-static inline void clkHiLo(bool hi) { digitalWrite(PIN_RTC_SCLK, hi ? HIGH : LOW); }
-static void rtcBitWrite(bool b) {
-  digitalWrite(PIN_RTC_IO, b ? HIGH : LOW);
-  clkHiLo(true);
-  clkHiLo(false);
+static bool readRegs(uint8_t *t, uint8_t n) {   // n registers from 0x00
+  Wire.beginTransmission(RTC_ADDR);
+  Wire.write((uint8_t)0x00);
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom((int)RTC_ADDR, (int)n) != n) return false;
+  for (uint8_t i = 0; i < n; i++) t[i] = (uint8_t)Wire.read();
+  return true;
 }
-static bool rtcBitRead() {
-  clkHiLo(true);
-  clkHiLo(false);                              // falling edge: chip updates
-  return (digitalRead(PIN_RTC_IO) == HIGH);
+static bool writeRegs(const uint8_t *t) {
+  Wire.beginTransmission(RTC_ADDR);
+  Wire.write((uint8_t)0x00);
+  for (uint8_t i = 0; i < 7; i++) Wire.write(t[i]);
+  return Wire.endTransmission() == 0;
 }
-static void byteWrite(uint8_t v) {
-  pinMode(PIN_RTC_IO, OUTPUT);
-  for (int i = 0; i < 8; i++) rtcBitWrite((v >> i) & 1);
-}
-static uint8_t byteRead() {
-  pinMode(PIN_RTC_IO, INPUT);
-  uint8_t v = 0;
-  for (int i = 0; i < 8; i++) if (rtcBitRead()) v |= (uint8_t)(1u << i);
-  return v;
-}
-static void xfer(uint8_t addr, const uint8_t *data, uint8_t n, uint8_t *out) {
-  ceHiLo(false);
-  ceHiLo(true);                                   // chip select (CE = RST)
-  rtcBitWrite(false);                                // START
-  byteWrite(addr);
-  if (addr & 0x01) {                              // R/W bit (bit0): 1 = read
-    for (uint8_t i = 0; i < n; i++) out[i] = byteRead();
-  } else {
-    for (uint8_t i = 0; i < n; i++) byteWrite(data[i]);
+static int hour24(uint8_t hr) {
+  if (hr & 0x40) {                               // 12-hour mode
+    int h = bcd2bin(hr & 0x1F);
+    if (hr & 0x20) return (h == 12) ? 12 : h + 12;
+    return (h == 12) ? 0 : h;
   }
-  rtcBitWrite(true);                                 // STOP
-  ceHiLo(false);
+  return bcd2bin(hr & 0x3F);                     // 24-hour mode (bit5 = 20s)
 }
 static bool sane(const uint8_t *t) {
-  return bcd2bin(t[0]) < 60 && bcd2bin(t[1]) < 60
-      && bcd2bin(t[2] & 0x1F) <= 23
+  uint8_t sec = t[0] & 0x7F, min = t[1] & 0x7F, mon = t[5] & 0x1F;
+  uint8_t hr = (t[2] & 0x40) ? (t[2] & 0x1F) : (t[2] & 0x3F);
+  if (!bcdOk(sec) || !bcdOk(min) || !bcdOk(hr) || !bcdOk(t[4]) ||
+      !bcdOk(mon) || !bcdOk(t[6])) return false;
+  bool hourOk = (t[2] & 0x40) ? (bcd2bin(hr) >= 1 && bcd2bin(hr) <= 12)
+                              : (bcd2bin(hr) <= 23);
+  return bcd2bin(sec) < 60 && bcd2bin(min) < 60 && hourOk
       && bcd2bin(t[4]) >= 1 && bcd2bin(t[4]) <= 31
-      && bcd2bin(t[5]) >= 1 && bcd2bin(t[5]) <= 12
+      && bcd2bin(mon) >= 1 && bcd2bin(mon) <= 12
       && bcd2bin(t[6]) >= 19 && bcd2bin(t[6]) <= 99;
 }
 
 static bool sPresent = false;
-static bool sTrusted = false;
 static uint8_t sRegs[8];                          // last read (for the page)
 
 static bool rtcBegin() {
-  sPresent = false;
-  sTrusted = false;
-  if (PIN_RTC_RST < 0 || PIN_RTC_SCLK < 0 || PIN_RTC_IO < 0) return false;
-  pinMode(PIN_RTC_RST, OUTPUT);  ceHiLo(false);
-  pinMode(PIN_RTC_SCLK, OUTPUT); clkHiLo(false);
-  pinMode(PIN_RTC_IO, OUTPUT);   digitalWrite(PIN_RTC_IO, LOW);
-  {
-    uint8_t zero = 0x00;
-    xfer(0x8E, &zero, 1, nullptr);               // clear WP (power-on state
-  }                                              // is undefined per datasheet)
-  uint8_t orig = 0, magic = 0xA5, back = 0;
-  xfer(0xC1, nullptr, 1, &orig);
-  xfer(0xC0, &magic, 1, nullptr);
-  xfer(0xC1, nullptr, 1, &back);
-  xfer(0xC0, &orig, 1, nullptr);                 // give the byte back
-  sPresent = (back == magic);
-  if (!sPresent) return false;
-  {
-    uint8_t a[7];
-    xfer(0x81, nullptr, 7, a);
-    sTrusted = sane(a) && !(a[0] & 0x80);        // CH flag (seconds bit7)
-  }
-  return true;
+  Wire.beginTransmission(RTC_ADDR);
+  sPresent = (Wire.endTransmission() == 0);
+  return sPresent;
 }
 
 static bool rtcReadTime(time_t *outEp) {
   if (!sPresent) return false;
-  uint8_t t[7];
-  xfer(0x81, nullptr, 7, t);
-  if (!sane(t)) return false;
-  memcpy(sRegs, t, 7);
-  sRegs[7] = 0; xfer(0x8F, nullptr, 1, &sRegs[7]);
-  int year = 2000 + bcd2bin(t[6]);
-  int hour;
-  if (t[2] & 0x80) {                              // 12-hour mode
-    hour = bcd2bin(t[2] & 0x1F);
-    if (t[2] & 0x20) hour = (hour == 12) ? 12 : hour + 12;
-    else            hour = (hour == 12) ? 0  : hour;
-  } else
-    hour = bcd2bin(t[2] & 0x1F);
-  time_t ep = civilToEpoch(year, bcd2bin(t[5]), bcd2bin(t[4]),
-                           hour, bcd2bin(t[1]), bcd2bin(t[0]));
+  uint8_t t[8];
+  if (!readRegs(t, 8)) return false;             // time + control register
+  memcpy(sRegs, t, 8);
+  if ((t[0] & 0x80) || !sane(t)) return false;   // halted / junk
+  time_t ep = civilToEpoch(2000 + bcd2bin(t[6]), bcd2bin(t[5] & 0x1F),
+                           bcd2bin(t[4]), hour24(t[2]),
+                           bcd2bin(t[1] & 0x7F), bcd2bin(t[0] & 0x7F));
   ep -= (time_t)tzMinutes * 60;                   // chip holds LOCAL time
   *outEp = ep;
   return true;
@@ -204,18 +172,15 @@ static bool rtcWriteEpoch(time_t ep) {
   if (ep <= (time_t)1700000000) return false;     // refuse junk
   int y, mo, d, h, mi, s;
   epochToCivil(ep + (time_t)tzMinutes * 60, &y, &mo, &d, &h, &mi, &s);
-  uint8_t dow = dowFromCivil(y, mo, d);
   uint8_t t[7] = {
-    bin2bcd((uint8_t)s), bin2bcd((uint8_t)mi),
-    bin2bcd((uint8_t)(h & 0x1F)),
-    bin2bcd(dow), bin2bcd((uint8_t)d), bin2bcd((uint8_t)mo),
+    bin2bcd((uint8_t)s),                          // CH = 0: oscillator runs
+    bin2bcd((uint8_t)mi),
+    bin2bcd((uint8_t)h),                          // 24-hour mode
+    dowFromCivil(y, mo, d),
+    bin2bcd((uint8_t)d), bin2bcd((uint8_t)mo),
     bin2bcd((uint8_t)((y >= 2000 ? y - 2000 : y) % 100)),
   };
-  uint8_t zero = 0x00;
-  xfer(0x8E, &zero, 1, nullptr);                  // clear WP before the write
-  xfer(0x80, t, 7, nullptr);                      // burst; clears CH too
-  sTrusted = true;
-  return true;
+  return writeRegs(t);
 }
 
 static String fmtLocal(time_t ep) {
@@ -227,30 +192,62 @@ static String fmtLocal(time_t ep) {
   return String(b);
 }
 
+// ---- I2C bus scan: name what answers --------------------------------------
+static const char *devName(uint8_t a) {
+  if (a == 0x68) return "DS1307 / DS3231 RTC";
+  if (a == 0x50) return "24Cxx EEPROM (RTC board AT24C32 or AT24C256 registry)";
+  if (a >= 0x51 && a <= 0x57) return "24Cxx EEPROM (0x57 = DS3231 board AT24C32)";
+  if (a == 0x38) return "AHT10 chamber sensor";
+  if (a >= 0x20 && a <= 0x27) return "PCF8574 keypad / expander";
+  if (a >= 0x38 && a <= 0x3F) return "PCF8574A (clashes with AHT10!)";
+  return "unknown";
+}
+static String gScan = "not scanned";
+static uint8_t gScanN = 0;
+static void scanBus() {
+  String out;
+  gScanN = 0;
+  for (uint8_t a = 0x08; a < 0x78; a++) {
+    Wire.beginTransmission(a);
+    if (Wire.endTransmission() == 0) {
+      char b[80];
+      snprintf(b, sizeof(b), "%s0x%02X %s", gScanN ? " &middot; " : "", a, devName(a));
+      out += b;
+      gScanN++;
+    }
+  }
+  gScan = gScanN ? out : String("nothing answered - check SDA/SCL, GND and the pull-ups");
+  Serial.printf("[i2c] %u device(s): %s\n", (unsigned)gScanN, gScan.c_str());
+}
+
 // --------------------------------------------------------------------
-// Web + OTA
+// Web + OTA  (royal blue + golden brown, like the dryer website)
 // --------------------------------------------------------------------
 static const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <!doctype html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DS1302 RTC test</title>
+<title>DS1307 RTC test</title>
 <style>
- body{font-family:system-ui,Segoe UI,Roboto,sans-serif;background:#101418;color:#e8edf2;margin:0;padding:16px}
- h1{font-size:18px;margin:0 0 4px}.sub{color:#8a97a5;font-size:12px;margin-bottom:14px}
- .card{background:#1a2129;border:1px solid #2a3542;border-radius:10px;padding:12px 14px;margin-bottom:12px}
- .big{font-size:26px;font-weight:600}.ok{color:#4cd964}.bad{color:#ff5f57}.warn{color:#ffd60a}
- .row{display:flex;justify-content:space-between;font-size:14px;margin-top:6px;color:#b9c4cf}
- .tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;background:#2a3542}
- button{margin-top:10px;background:#2f6fed;border:0;color:#fff;padding:9px 14px;border-radius:8px;font-size:14px}
- button:disabled{background:#3a4553;color:#8a97a5}
+ body{font-family:system-ui,Segoe UI,Roboto,sans-serif;margin:0;padding:16px;color:#fff8ea;min-height:100vh;
+  background:#1b45b5 linear-gradient(180deg,#2352c9 0%,#1d48b8 45%,#3560c8 62%,#c4914a 76%,#8a5a14 100%) fixed}
+ h1{font-size:18px;margin:0 0 4px;color:#f6dd9c}.sub{color:#d6def4;font-size:12px;margin-bottom:14px}
+ .card{background:rgba(19,48,142,.88);border:1px solid rgba(233,196,106,.35);border-radius:12px;padding:12px 14px;margin-bottom:12px;
+  box-shadow:0 8px 20px rgba(6,16,58,.35)}
+ .big{font-size:26px;font-weight:600}.ok{color:#5ee89a}.bad{color:#ff8a8a}.warn{color:#f7c552}
+ .row{display:flex;justify-content:space-between;gap:12px;font-size:14px;margin-top:6px;color:#d6def4}
+ .row span:last-child{text-align:right;color:#fff8ea}
+ .tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;background:rgba(8,24,80,.6)}
+ button{margin-top:10px;background:linear-gradient(135deg,#f6dd9c,#b8862b);border:0;color:#2b1a02;font-weight:700;
+  padding:9px 14px;border-radius:8px;font-size:14px}
+ button:disabled{background:rgba(8,24,80,.5);color:#b2c0e4}
 </style></head><body>
-<h1>DS1302 RTC test</h1>
-<div class="sub">smart dehummidifier &middot; rtc-test &middot; refreshes 1/s &middot; verdict <span id="st" class="tag">...</span></div>
+<h1>DS1307 RTC test</h1>
+<div class="sub">smart dehumidifier &middot; rtc-test &middot; refreshes 1/s &middot; verdict <span id="st" class="tag">...</span></div>
 <div id="cards">loading...</div>
 <script>
 function card(c){var h='<div class="card"><div class="big '+(c.cls||'')+'">'+c.big+'</div>';
- h+='<div style="color:#8a97a5;font-size:12px">'+c.t+'</div>';
+ h+='<div style="color:#d6def4;font-size:12px">'+c.t+'</div>';
  (c.rows||[]).forEach(function(r){h+='<div class="row"><span>'+r[0]+'</span><span>'+r[1]+'</span></div>'});
  if(c.btn)h+='<button onclick="setnow()">SET TIME FROM PHONE</button>';
  return h+'</div>'}
@@ -284,50 +281,52 @@ static void jRows(String &rows, const char *k, const String &v) {
 
 static void refreshJson() {
   String j;
-  j.reserve(700);
+  j.reserve(1400);
   time_t ep = 0;
+  if (!sPresent) rtcBegin();                      // hot-plug: re-probe
   bool have = rtcReadTime(&ep);
   const char *verdict;
   String rows, big, cls;
+  char pins[48];
+  snprintf(pins, sizeof(pins), "SDA %d / SCL %d, VCC 5 V", PIN_I2C0_SDA, PIN_I2C0_SCL);
 
-  if (PIN_RTC_RST < 0) {
-    verdict = "NOT FITTED";
-    big = "no pins"; cls = "";
-    jRows(rows, "Board", HW_S3 ? "S3 (pins fixed)" : "classic ESP32");
-    jRows(rows, "Note", "set the three PIN_RTC_* defines to bench-test a spare module");
-  } else if (!sPresent) {
+  if (!sPresent) {
     verdict = "FAIL";
     big = "NO CHIP"; cls = "bad";
-    jRows(rows, "Probe", "scratch-RAM magic 0xA5 not echoed back");
-    jRows(rows, "Check", "VCC->3V3, GND->GND, SCLK->40, I/O->42, RST->47");
+    jRows(rows, "Probe", "nothing ACKs at 0x68");
+    jRows(rows, "Check", String(pins) + " (the DS1307 ignores the bus at 3.3 V)");
+    jRows(rows, "Pull-ups", "5 V pull-ups on the module (R2/R3)? remove them / level shifter");
   } else if (have) {
     verdict = "PASS";
     big = fmtLocal(ep); cls = "ok";
-    char regs[64];
+    char regs[80];
     snprintf(regs, sizeof(regs), "sec=%02X min=%02X hr=%02X dow=%02X date=%02X mon=%02X yr=%02X ctrl=%02X",
              sRegs[0], sRegs[1], sRegs[2], sRegs[3], sRegs[4], sRegs[5], sRegs[6], sRegs[7]);
     jRows(rows, "Chip registers (BCD)", String(regs));
-    jRows(rows, "CH (halt) flag", (sRegs[0] & 0x80) ? "SET (clock stopped)" : "clear (ticking)");
-    jRows(rows, "WP (write-protect)", (sRegs[7] & 0x80) ? "SET" : "clear");
-    jRows(rows, "Timezone", String(tzMinutes / 60) + (tzMinutes % 60 ? "+" + String(tzMinutes % 60) : "") + " h (UTC)");
+    jRows(rows, "CH (clock halt)", "clear (ticking)");
+    jRows(rows, "Hour mode", (sRegs[2] & 0x40) ? "12 h (firmware re-writes 24 h on set)" : "24 h");
+    int tzA = abs((int)tzMinutes);
+    jRows(rows, "Timezone", String("UTC") + (tzMinutes < 0 ? "-" : "+") + String(tzA / 60) +
+                            (tzA % 60 ? ":" + String(tzA % 60) : String("")));
   } else {
     verdict = "WARN";
-    big = "present, no valid time"; cls = "warn";
-    jRows(rows, "State", "fresh module or halted clock - press SET TIME FROM PHONE");
-    jRows(rows, "Note", "chip is detected; its registers are not a sane time yet");
+    big = "found, clock not set"; cls = "warn";
+    jRows(rows, "CH (clock halt)", (sRegs[0] & 0x80) ? "SET - oscillator stopped (fresh module / dead coin cell)" : "clear");
+    jRows(rows, "State", "press SET TIME FROM PHONE");
   }
-  if (sPresent && PIN_RTC_RST >= 0) jRows(rows, "Last set", gLastSetMsg);
+  if (sPresent) jRows(rows, "Last set", gLastSetMsg);
+  jRows(rows, "I2C bus", gScan);
 
-  j += "{\"verdict\":\"" + String(verdict) + "\",\"cards\":[{\"t\":\"DS1302 module (RST 40 / SCLK 42 / I/O 47)\",";
+  j += "{\"verdict\":\"" + String(verdict) + "\",\"cards\":[{\"t\":\"DS1307 module (I2C 0x68, " + String(pins) + ")\",";
   j += "\"big\":\"" + big + "\",\"cls\":\"" + cls + "\",";
-  j += (sPresent && !have && !gSetBusy) ? "\"btn\":true," : "";
-  j += "\"rows\":" + rows + "]}]}";
+  j += (sPresent && !gSetBusy) ? "\"btn\":true," : "";
+  j += "\"rows\":[" + rows + "]}]}";
   gJson = j;
 }
 
 static void handleSet() {
   if (!web.hasArg("epoch")) { web.send(200, "application/json", "{\"msg\":\"epoch?\"}"); return; }
-  if (PIN_RTC_RST < 0 || !sPresent) { web.send(200, "application/json", "{\"msg\":\"no DS1302 detected\"}"); return; }
+  if (!sPresent) { web.send(200, "application/json", "{\"msg\":\"no DS1307 detected\"}"); return; }
   time_t ep = (time_t)web.arg("epoch").toInt();
   if (web.hasArg("tz")) tzMinutes = constrain(web.arg("tz").toInt(), -720, 840);
   gSetBusy = true;
@@ -338,8 +337,8 @@ static void handleSet() {
   gSetBusy = false;
   char msg[64];
   snprintf(msg, sizeof(msg), "%s",
-           ok ? (readBack && back == ep ? "written + verified" : "written, re-read mismatch")
-              : "rejected (junk epoch)");
+           ok ? (readBack && back >= ep && back <= ep + 2 ? "written + verified" : "written, re-read mismatch")
+              : "rejected (junk epoch or bus error)");
   gLastSetMsg = String(msg) + " @ " + fmtLocal(ep) + " local";
   Serial.printf("[rtc] SET from phone: %s\n", msg);
   String out = "{\"msg\":\"" + String(msg) + "\"}";
@@ -376,18 +375,20 @@ void setup() {
   delay(300);
   Serial.println();
   Serial.println("==============================================");
-  Serial.printf(" %s TEST - smart dehummidifier v2.0.21\n", TEST_NAME);
+  Serial.printf(" %s TEST - smart dehumidifier v2.0.23\n", TEST_NAME);
   Serial.printf(" board: %s (S3: %s)\n",
                 ESP.getChipModel(), HW_S3 ? "YES" : "no");
-  Serial.printf(" pins: RST=%d SCLK=%d IO=%d  tz=UTC+%d\n",
-                PIN_RTC_RST, PIN_RTC_SCLK, PIN_RTC_IO, tzMinutes / 60);
+  Serial.printf(" I2C0: SDA=%d SCL=%d @100 kHz  RTC 0x%02X  tz=UTC%+d min\n",
+                PIN_I2C0_SDA, PIN_I2C0_SCL, RTC_ADDR, tzMinutes);
 
+  Wire.begin(PIN_I2C0_SDA, PIN_I2C0_SCL, 100000);   // DS1307 max = 100 kHz
+  scanBus();
   bool found = rtcBegin();
   time_t ep = 0;
-  if (!found) Serial.println("[rtc] NO DS1302 on the bus");
+  if (!found) Serial.println("[rtc] NO DS1307 at 0x68 (VCC must be 5 V; check SDA/SCL/GND)");
   else if (rtcReadTime(&ep))
-    Serial.printf("[rtc] DS1302 OK - %s (local, tz %d)\n", fmtLocal(ep).c_str(), tzMinutes);
-  else Serial.println("[rtc] DS1302 present, no valid time yet (fresh module)");
+    Serial.printf("[rtc] DS1307 OK - %s (local, tz %d)\n", fmtLocal(ep).c_str(), tzMinutes);
+  else Serial.println("[rtc] DS1307 found, clock not set yet (fresh module / coin cell)");
 
   web.on("/", []() { web.send_P(200, "text/html", INDEX_HTML); });
   web.on("/data", []() { web.send(200, "application/json", gJson); });
@@ -402,15 +403,15 @@ void loop() {
   ArduinoOTA.handle();          // OTA lives in every test sketch
   web.handleClient();
 
-  static uint32_t lastLine = 0;
+  static uint32_t lastLine = 0, lastScan = 0;
   uint32_t now = millis();
+  if (now - lastScan >= 10000) { lastScan = now; scanBus(); }
   if (now - lastLine >= 2000) {
     lastLine = now;
     time_t ep = 0;
-    if (PIN_RTC_RST < 0) Serial.println("[rtc] not fitted (pins -1)");
-    else if (!sPresent)  Serial.println("[rtc] no DS1302 on the bus");
+    if (!sPresent && !rtcBegin()) Serial.println("[rtc] no DS1307 at 0x68");
     else if (rtcReadTime(&ep)) Serial.printf("[rtc] %s (local, tz %d)\n", fmtLocal(ep).c_str(), tzMinutes);
-    else Serial.println("[rtc] present, no valid time yet");
+    else Serial.println("[rtc] found, clock not set yet");
     refreshJson();
   }
 }
