@@ -60,7 +60,7 @@ const check = (name, cond) => {
 };
 
 const dom = new JSDOM(html, {
-  url: 'https://pavan-nikhil-993.github.io/arena/',
+  url: 'https://pavan-nikhil-993.github.io/SIH_2026_022/',
   runScripts: 'dangerously',
   beforeParse(window) {
     window.localStorage.setItem('ghRepo', 'test/dryer-data');

@@ -125,10 +125,12 @@ content), so the ESP serves a **tiny bridge page** that frames the GitHub
 site and relays every API call.
 
 **One-time setup**
-1. Repo → Settings → Pages → Deploy from a branch → `main` / `/docs`
-   (the generated site is committed in `docs/index.html`).
-2. Check `ONLINE_UI_URL` in `src/config.h` matches your Pages URL
-   (default: `https://pavan-nikhil-993.github.io/arena/`).
+1. Repo → Settings → Pages → Source: **GitHub Actions**. The included
+   workflow (`.github/workflows/pages.yml`) publishes the generated
+   `docs/index.html` on every push to `main`.
+2. Check `ONLINE_UI_URL` in `src/config.h` (and `variants/esp32-s3/config-s3.h`)
+   matches your Pages URL
+   (default: `https://pavan-nikhil-993.github.io/SIH_2026_022/`).
 3. On the phone (connected to the dryer hotspot, mobile data on), open
    **http://192.168.4.1/online** — bookmark it. The GitHub-hosted UI loads
    with full live data, thresholds, history and weather relay.

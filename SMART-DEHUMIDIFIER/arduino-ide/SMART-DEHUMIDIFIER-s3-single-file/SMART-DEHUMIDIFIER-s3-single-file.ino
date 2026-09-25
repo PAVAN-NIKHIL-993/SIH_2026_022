@@ -138,9 +138,10 @@
 // OPTIONAL online UI: the dashboard is also hosted on GitHub Pages and
 // loaded through http://192.168.4.1/online (tiny bridge page on the ESP
 // relays API calls, because browsers block https->http directly).
-// Enable Pages in repo Settings (main branch, /docs folder) and put the
-// URL here. Leave as-is and /online simply falls back to the built-in UI.
-#define ONLINE_UI_URL "https://pavan-nikhil-993.github.io/arena/"
+// Repo Settings -> Pages -> Source: "GitHub Actions" (.github/workflows/
+// pages.yml publishes SMART-DEHUMIDIFIER/docs on every push to main), then
+// put the site URL here. No internet -> /online falls back to the built-in UI.
+#define ONLINE_UI_URL "https://pavan-nikhil-993.github.io/SIH_2026_022/"
 
 // =====================================================================
 //  PIN MAP  (ESP32-S3 DevKit - the pillar build; v2.0.20 remap in)
@@ -7626,7 +7627,7 @@ void loop() {
 
 #endif  // DRYER_RTOS
 /* ==== END OF FILE ====
- * total lines (wc -l): 7632   non-blank lines: 7007
+ * total lines (wc -l): 7633   non-blank lines: 7008
  * build 2026-09-25 - if these numbers differ from what you see,
  * you are looking at an older copy; regenerate: node tools/single-file/assemble.js
  */
