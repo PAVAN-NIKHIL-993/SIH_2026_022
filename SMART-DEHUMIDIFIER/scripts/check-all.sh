@@ -18,9 +18,10 @@ python3 tools/verify_strings.py --printf arduino-ide/SMART-DEHUMIDIFIER-single-f
 echo "== 3/6 symbol audit (lost-edit detector) =="
 python3 tools/audit-symbols.py
 
-echo "== 4/6 DS1302 driver host test (real src/rtc.cpp vs fake chip) =="
+echo "== 4/6 host C++ tests: DS1307 driver (real src/rtc.cpp) + sensor-test pages send valid JSON =="
 if command -v g++ >/dev/null 2>&1; then
   sh tools/host-rtc-test/run.sh
+  sh tools/sensor-page-test/run.sh
 elif [ "${CI:-}" = true ]; then
   echo "g++ is required in CI"; exit 1
 else

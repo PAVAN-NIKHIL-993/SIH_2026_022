@@ -148,19 +148,21 @@ static const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DHT test</title>
 <style>
- body{font-family:system-ui,Segoe UI,Roboto,sans-serif;background:#101418;color:#e8edf2;margin:0;padding:16px}
- h1{font-size:18px;margin:0 0 4px}.sub{color:#8a97a5;font-size:12px;margin-bottom:14px}
- .card{background:#1a2129;border:1px solid #2a3542;border-radius:10px;padding:12px 14px;margin-bottom:12px}
- .big{font-size:30px;font-weight:600}.ok{color:#4cd964}.bad{color:#ff5f57}.warn{color:#ffd60a}
- .row{display:flex;justify-content:space-between;font-size:14px;margin-top:6px;color:#b9c4cf}
- .tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;background:#2a3542}
+ body{font-family:system-ui,Segoe UI,Roboto,sans-serif;margin:0;padding:16px;color:#fff8ea;min-height:100vh;
+  background:#1b45b5 linear-gradient(180deg,#2352c9 0%,#1d48b8 45%,#3560c8 62%,#c4914a 76%,#8a5a14 100%) fixed}
+ h1{font-size:18px;margin:0 0 4px;color:#f6dd9c}.sub{color:#d6def4;font-size:12px;margin-bottom:14px}
+ .card{background:rgba(19,48,142,.88);border:1px solid rgba(233,196,106,.35);border-radius:12px;padding:12px 14px;margin-bottom:12px;
+  box-shadow:0 8px 20px rgba(6,16,58,.35)}
+ .big{font-size:30px;font-weight:600}.ok{color:#5ee89a}.bad{color:#ff8a8a}.warn{color:#f7c552}
+ .row{display:flex;justify-content:space-between;gap:12px;font-size:14px;margin-top:6px;color:#d6def4}
+ .tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;background:rgba(8,24,80,.6)}
 </style></head><body>
 <h1>DHT sensor test</h1>
-<div class="sub">smart dehummidifier &middot; dht-test &middot; refreshes 1/s &middot; verdict <span id="st" class="tag">...</span></div>
+<div class="sub">smart dehumidifier &middot; dht-test &middot; refreshes 1/s &middot; verdict <span id="st" class="tag">...</span></div>
 <div id="cards">loading...</div>
 <script>
 function card(c){var h='<div class="card"><div class="big '+(c.cls||'')+'">'+c.big+'</div>';
- h+='<div style="color:#8a97a5;font-size:12px">'+c.t+'</div>';
+ h+='<div style="color:#d6def4;font-size:12px">'+c.t+'</div>';
  (c.rows||[]).forEach(function(r){h+='<div class="row"><span>'+r[0]+'</span><span>'+r[1]+'</span></div>'});
  return h+'</div>'}
 async function tick(){try{
@@ -190,7 +192,7 @@ static void cardDht(DhtDev &a, String &j) {
   if (a.pin < 0) {
     jRows(rows, "Board", HW_S3 ? "no pin in this layout" : "classic ESP32");
     jRows(rows, "Note", HW_S3 ? "check S3 wiring" : "set TEST_DHT_PIN in the sketch to bench-test one");
-    j += "{\"t\":\"" + String(a.label) + "\",\"big\":\"not fitted\",\"cls\":\"\",\"rows\":" + rows + "}";
+    j += "{\"t\":\"" + String(a.label) + "\",\"big\":\"not fitted\",\"cls\":\"\",\"rows\":[" + rows + "]}";
     return;
   }
   if (a.ok) {
@@ -199,17 +201,17 @@ static void cardDht(DhtDev &a, String &j) {
     jRows(rows, "Bad/checksum", String(a.bad + a.miss));
     jRows(rows, "Data pin", "GPIO " + String((int)a.pin));
     j += "{\"t\":\"" + String(a.label) + "\",\"big\":\"" + String(a.t, 1) +
-         " C\",\"cls\":\"ok\",\"rows\":" + rows + "}";
+         " C\",\"cls\":\"ok\",\"rows\":[" + rows + "]}";
     return;
   }
   if (a.good > 0 || a.bad > 0) {
     jRows(rows, "Good frames so far", String(a.good));
     jRows(rows, "Note", "was working, check the connection now");
-    j += "{\"t\":\"" + String(a.label) + "\",\"big\":\"no data\",\"cls\":\"warn\",\"rows\":" + rows + "}";
+    j += "{\"t\":\"" + String(a.label) + "\",\"big\":\"no data\",\"cls\":\"warn\",\"rows\":[" + rows + "]}";
   } else {
     jRows(rows, "Frames", "none decoded yet (3 s / 10 s cadence)");
     jRows(rows, "Check", "3V3 + GND + 10 k pull-up DATA->3V3, GPIO");
-    j += "{\"t\":\"" + String(a.label) + "\",\"big\":\"NO FRAMES\",\"cls\":\"bad\",\"rows\":" + rows + "}";
+    j += "{\"t\":\"" + String(a.label) + "\",\"big\":\"NO FRAMES\",\"cls\":\"bad\",\"rows\":[" + rows + "]}";
   }
 }
 
@@ -257,7 +259,7 @@ void setup() {
   delay(300);
   Serial.println();
   Serial.println("==============================================");
-  Serial.printf(" %s SENSOR TEST - smart dehummidifier v2.0.20\n", TEST_NAME);
+  Serial.printf(" %s SENSOR TEST - smart dehumidifier v2.0.20\n", TEST_NAME);
   Serial.printf(" board: %s (S3: %s)\n",
                 ESP.getChipModel(), HW_S3 ? "YES" : "no");
 
