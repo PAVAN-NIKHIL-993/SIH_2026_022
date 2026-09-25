@@ -70,7 +70,9 @@ Rules of thumb:
 
 **Editing the website:** change `src/webui.h` → run
 `node tools/online/sync-online.js` → commit both files. ESP gets changes on
-next flash; Pages gets them on next push.
+next flash; Pages gets them on next push. Check the result first in any
+browser, no hardware needed: `node tools/preview/serve.js` → localhost:8080
+(simulated live data for every tile, the chart and `/display`).
 
 ## 6. Operating rhythm (daily use)
 

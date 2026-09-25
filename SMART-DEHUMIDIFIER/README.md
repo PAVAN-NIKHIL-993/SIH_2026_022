@@ -148,6 +148,13 @@ site and relays every API call.
 `node tools/online/sync-online.js` regenerates `docs/index.html` (adds the
 bridge layer + GitHub backup) — commit both, push, done.
 
+**Preview it without an ESP32:** `node tools/preview/serve.js` →
+<http://localhost:8080/> (dashboard), `/display` (kiosk), `/online`. It serves
+the pages straight from `src/webui.h` with a simulated drying cycle behind
+`/api/*` — edit, refresh, see. The look since v2.0.23: **royal-blue sky over a
+golden-brown horizon** (never black); the 🎨 Theme button offers six royal /
+golden variants plus a custom colour, remembered per phone.
+
 **The buzzer is not optional** — it is part of the core build (GPIO13 classic / GPIO38 S3)
 and always compiles in.
 
@@ -292,7 +299,8 @@ SMART-DEHUMIDIFIER/
 ├── media/                  concept render + photo shot-list
 ├── tools/                  single-file assembler · online-UI sync ·
 │                           string/printf verifiers · symbol audit ·
-│                           host DS1302 test · UI test suites (jsdom)
+│                           host DS1307 test · sensor-page JSON test ·
+│                           UI test suites (jsdom) · preview server
 ├── scripts/check-all.sh    one-command release gate (same as CI)
 ├── scripts/compile-sketches.sh  real arduino-cli build of all 15 sketches (CI)
 ├── ../.github/workflows/   CI (gate + real compile) · Pages deploy
