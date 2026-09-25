@@ -14,7 +14,7 @@ two MCU variants (classic ESP32 + ESP32-S3) · OTA updates from the
 dryer's own website.*
 
 **Contents:** [1 Concept](#1-concept) · [2 Specifications](#2-specifications-at-a-glance) ·
-[3 Batch workflow](#3-how-a-batch-runs) · [4 Features](#4-feature-list-firmware-v18) ·
+[3 Batch workflow](#3-how-a-batch-runs) · [4 Features](#4-feature-list-firmware-v20) ·
 [5 Wiring & pins](#5-wiring--pin-maps) · [6 Parameters](#6-every-parameter) ·
 [7 Safety](#7-safety-chain) · [8 Error detection](#8-hardware-error-detection) ·
 [9 Build](#9-build-it) · [10 Flash & update](#10-flash--update) ·
@@ -316,8 +316,9 @@ Full symptom→cause→fix table: manual 05.
 │   │     SMART-DEHUMIDIFIER-s3-single-file.ino     ESP32-S3 (recommended)
 │   │     sensor-tests/                      per-sensor test suite (AHT10, DHT,
 │   │                                        scale, door, battery, supply,
-│   │                                        buttons, keypad, EEPROM) - each
-│   │                                        with its own OTA + live web page
+│   │                                        buttons, keypad, EEPROM, DS1302
+│   │                                        RTC) - each with its own OTA +
+│   │                                        live web page
 │   ├── src/ + platformio.ini   shared logic (PlatformIO layout)
 │   ├── variants/esp32-s3/      S3 pin map + config + why-S3
 │   ├── docs/                   datasheet · PARAMETERS · manuals 00–10 · wiring.svg
@@ -327,9 +328,11 @@ Full symptom→cause→fix table: manual 05.
 │   ├── demo/                   10-minute demo script + one-pager
 │   ├── compliance/             safety checklist · standards roadmap
 │   ├── media/                  concept render + photo shot-list
-│   ├── tools/                  assembler (2 variants) · verifiers · UI suites
-│   └── scripts/check-all.sh    one-command release gate
-├── .github/workflows/          CI (scans + tests + sync) · Pages deploy
+│   ├── tools/                  assembler (2 variants) · verifiers · symbol audit ·
+│   │                           host DS1302 test · UI suites
+│   └── scripts/                check-all.sh = one-command release gate ·
+│                               compile-sketches.sh = real arduino-cli build
+├── .github/workflows/          CI (gate + real compile of all 15 sketches) · Pages deploy
 └── CONTRIBUTING · SECURITY · CHANGELOG · LICENSE (MIT)
 ```
 

@@ -94,7 +94,9 @@ core0: web:     requests served continuously; WiFi/lwIP callbacks fly by
 
 ## Verification status
 
-Both modes compile clean against the real arduino-esp32 2.0.17 +
-ArduinoJson 7.1.0 headers (`-DDRYER_RTOS=0` / `=1` syntax-checked, all 10
-sources). Behavioural parity (state machine, beeps, relay, history) follows
+Mode 0 (the default) is compiled for real by CI on every push — both
+variants, arduino-esp32 core 3.3.12 (`scripts/compile-sketches.sh`).
+Mode 1 was last syntax-checked against arduino-esp32 2.0.17
+(`-DDRYER_RTOS=1`); build it with the same script after setting
+`DRYER_RTOS 1` in `config.h`. Behavioural parity (state machine, beeps, relay, history) follows
 from sharing the same modules — only scheduling differs.

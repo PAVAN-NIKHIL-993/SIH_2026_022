@@ -44,7 +44,7 @@ const ghSection = `
       this browser (localStorage) and is sent only to api.github.com. The ESP itself never touches
       the internet.</p>
       <div class="frow">
-        <div><label>Repository (user/repo)</label><input id="ghRepo" placeholder="PAVAN-NIKHIL-993/arena"></div>
+        <div><label>Repository (user/repo)</label><input id="ghRepo" placeholder="PAVAN-NIKHIL-993/SIH_2026_022"></div>
         <div><label>Branch</label><input id="ghBranch" value="main"></div>
         <div><label>Folder</label><input id="ghDir" value="dryer-cycles"></div>
       </div>

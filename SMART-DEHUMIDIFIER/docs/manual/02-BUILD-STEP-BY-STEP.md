@@ -33,7 +33,7 @@ BMS out (before relay) ──> 5 V buck ──> ESP32 VIN + GND   (ESP always po
 ## 3. Flash the ESP32 (before it touches the machine)
 
 1. Arduino IDE → Boards Manager → install **esp32 by Espressif**.
-2. Library Manager → **ArduinoJson by Benoit Blanchon (v7)**.
+2. No libraries to install — the firmware uses core built-ins only.
 3. Open `arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DEHUMIDIFIER-single-file.ino` → board **ESP32 Dev
    Module** → select Port → **Upload**. (PlatformIO: `pio run -t upload`.)
 4. Serial Monitor @115200. You should see the banner, `[sens]`, `[batt]`,

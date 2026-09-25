@@ -54,7 +54,7 @@ Solar panel ──> BMS ──> Battery ──> BMS output ──> [ LOAD RELAY 
 | ESP32 pin | Connects to | Notes |
 |---|---|---|
 | 21 / 22 | AHT10 #1 SDA / SCL | top of chamber (classic pin; S3: 8/9) |
-| 32 / 33 | AHT10 #2 SDA / SCL | classic only (S3: DHT22 on GPIO10 + DHT11 outdoor on 35) |
+| 32 / 33 | AHT10 #2 SDA / SCL | classic only (S3: DHT22 on GPIO10 + DHT11 outdoor on 41) |
 | 25 | BTS7960 **RPWM** *(through the 555 level shifter: GPIO25 → 555 pin 4, 555 pin 3 → RPWM)* | 1 kHz PWM of coil current |
 | — (GND) | BTS7960 **LPWM** | hard-tied to GND at the module (resistive load) |
 | 26 | BTS7960 **R_EN + L_EN** (jumpered together) | driver enable |
@@ -73,7 +73,7 @@ Solar panel ──> BMS ──> Battery ──> BMS output ──> [ LOAD RELAY 
 | 17 / 12 / 0 / 2 / 23 | spare | no display in this build — the website is the screen (`/` + `/display`) |
 | 21/22 | I2C hex keypad (optional) | PCF8574 backpack @ 0x20, shares Wire with AHT10 #1 |
 | 34 | weigh-scale DOUT (classic) | HX711 (S3: CLK=1, DOUT=2) |
-| 34 | door limit switch (S3) — no lock fitted | calibrate→load→ready workflow (software gates) |
+| — | door limit switch — S3 only, GPIO 21 (no lock fitted) | calibrate→load→ready workflow (software gates; classic = same flow, no switch) |
 
 All grounds common: ESP32 GND = BTS7960 GND = L298N GND = BMS output −.
 
@@ -260,8 +260,10 @@ pio run -t upload       # flash (USB)
 pio device monitor      # serial console @115200
 ```
 
-**Arduino IDE:** open `src/main.cpp`, install **ArduinoJson** (Benoit
-Blanchon, v7) from Library Manager, board = *ESP32 Dev Module*, Upload.
+**Arduino IDE:** open the generated single-file sketch
+`arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DEHUMIDIFIER-single-file.ino`
+(board *ESP32 Dev Module*) or the S3 one (board *ESP32S3 Dev Module*, USB
+CDC On Boot: Enabled) → Upload. No libraries to install — core built-ins only.
 
 ## Project layout
 
@@ -289,9 +291,11 @@ SMART-DEHUMIDIFIER/
 ├── compliance/             safety checklist · standards roadmap
 ├── media/                  concept render + photo shot-list
 ├── tools/                  single-file assembler · online-UI sync ·
-│                           string/printf verifiers · UI test suites (jsdom)
+│                           string/printf verifiers · symbol audit ·
+│                           host DS1302 test · UI test suites (jsdom)
 ├── scripts/check-all.sh    one-command release gate (same as CI)
-├── .github/workflows/      CI (scans+tests+sync) · Pages deploy
+├── scripts/compile-sketches.sh  real arduino-cli build of all 15 sketches (CI)
+├── ../.github/workflows/   CI (gate + real compile) · Pages deploy
 ├── CHANGELOG.md            release history
 └── ADVANCED-IDEAS.txt      the original idea vault
 ```
