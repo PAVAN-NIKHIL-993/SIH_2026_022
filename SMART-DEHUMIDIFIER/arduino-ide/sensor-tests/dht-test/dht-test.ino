@@ -53,6 +53,9 @@
 static const char *OTA_HOST  = "dht-test";
 static const char *TEST_NAME = "DHT";
 
+struct DhtDev;   // forward: the IDE's auto-generated prototypes land above
+                 // the first function, before the struct is defined below
+
 // --------------------------------------------------------------------
 // DHT driver - same 40-bit frame decoder as src/dht.cpp (v2.0.20)
 // --------------------------------------------------------------------

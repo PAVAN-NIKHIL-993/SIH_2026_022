@@ -4,7 +4,8 @@
 #             test, jsdom UI suites, generated files committed in sync)
 #   compile : a REAL arduino-cli build of every sketch, scripts/compile-sketches.sh
 #             (firmware for classic ESP32 + ESP32-S3, S3 bench sketches, UNO
-#             display sketches) - compiler errors show up as annotations
+#             display sketches) - each broken sketch gets one annotation with
+#             its first error (pinned to the line) + the key log lines
 name: CI
 
 on:
@@ -60,6 +61,4 @@ jobs:
             | tar -xz -C "$RUNNER_TEMP/arduino-cli" arduino-cli
           echo "$RUNNER_TEMP/arduino-cli" >> "$GITHUB_PATH"
       - name: scripts/compile-sketches.sh ${{ matrix.group }}
-        run: |
-          echo "::add-matcher::.github/problem-matchers/gcc.json"
-          bash SMART-DEHUMIDIFIER/scripts/compile-sketches.sh ${{ matrix.group }}
+        run: bash SMART-DEHUMIDIFIER/scripts/compile-sketches.sh ${{ matrix.group }}

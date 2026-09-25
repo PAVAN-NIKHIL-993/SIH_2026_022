@@ -33,21 +33,52 @@ in_ci() { [ "${GITHUB_ACTIONS:-}" = true ]; }
 gh_group()    { if in_ci; then echo "::group::$*"; else echo "== $*"; fi; }
 gh_endgroup() { if in_ci; then echo "::endgroup::"; fi; }
 
+# CI: ONE annotation per failed sketch, pinned to its first compiler error
+# (when that is inside the repo) and carrying the key lines + the log tail.
+# Linker / size / install errors have no file:line:col, and a plain gcc
+# problem matcher would burn the 10-per-step annotation budget on the first
+# broken sketch - so the script reports instead.
+annotate_fail() {   # annotate_fail <short-title> <what> <logfile>
+  in_ci || return 0
+  local loc file="" line="" props="title=$1"
+  loc="$(grep -m1 -oE '^[^ :][^:]*:[0-9]+:[0-9]+: (fatal )?error:' "$3" || true)"
+  if [ -n "$loc" ]; then
+    file="${loc%%:*}"; line="$(echo "$loc" | cut -d: -f2)"
+    file="${file#"${GITHUB_WORKSPACE:-}/"}"
+    case "$file" in /*) ;; *) props="file=$file,line=$line,$props" ;; esac
+  fi
+  { echo "$2"
+    grep -E -m 12 'error|undefined reference|multiple definition|too big|overflow|exceeds' "$3" || true
+    echo "..."; tail -n 6 "$3"; } \
+    | sed -e 's/%/%25/g' -e 's/\r//g' \
+    | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g' -e "s|^|::error ${props}::|"
+}
+
+step() {    # step <title> <cmd...> : run a setup command, stop on failure
+  local title="$1"; shift
+  local log; log="$(mktemp)"
+  if "$@" 2>&1 | tee "$log"; then rm -f "$log"; return 0; fi
+  annotate_fail "setup failed" "$title" "$log"; rm -f "$log"
+  echo "FAILED: $title"; exit 1
+}
+
 passed=(); failed=()
 build() {   # build <fqbn> <sketch-dir>
   gh_group "compile ${2}  [${1}]"
-  if arduino-cli compile --fqbn "$1" --warnings default "$2"; then
+  local log; log="$(mktemp)"
+  if arduino-cli compile --fqbn "$1" --warnings default "$2" 2>&1 | tee "$log"; then
     gh_endgroup; passed+=("$2")
   else
     gh_endgroup; failed+=("$2")
-    if in_ci; then echo "::error title=compile failed::$2 ($1)"; fi
+    annotate_fail "compile failed" "$2  [$1]" "$log"
   fi
+  rm -f "$log"
 }
 
 if [ "$group" != avr ]; then
   gh_group "install ${ESP32_CORE}"
-  arduino-cli core update-index --additional-urls "$ESP32_INDEX"
-  arduino-cli core install "$ESP32_CORE" --additional-urls "$ESP32_INDEX"
+  step "update ESP32 index" arduino-cli core update-index --additional-urls "$ESP32_INDEX"
+  step "install $ESP32_CORE" arduino-cli core install "$ESP32_CORE" --additional-urls "$ESP32_INDEX"
   gh_endgroup
   build "$FQBN_CLASSIC" arduino-ide/SMART-DEHUMIDIFIER-single-file
   build "$FQBN_S3"      arduino-ide/SMART-DEHUMIDIFIER-s3-single-file
@@ -57,9 +88,10 @@ fi
 
 if [ "$group" != esp32 ]; then
   gh_group "install ${AVR_CORE} + display libraries"
-  arduino-cli core update-index
-  arduino-cli core install "$AVR_CORE"
-  arduino-cli lib install "${AVR_LIBS[@]}"
+  step "update index" arduino-cli core update-index
+  step "install $AVR_CORE" arduino-cli core install "$AVR_CORE"
+  step "update library index" arduino-cli lib update-index
+  step "install ${AVR_LIBS[*]}" arduino-cli lib install "${AVR_LIBS[@]}"
   gh_endgroup
   build "$FQBN_UNO" arduino-ide/display-bridge-uno
   build "$FQBN_UNO" arduino-ide/display-test-uno

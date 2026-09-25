@@ -155,7 +155,7 @@ tick();
 WebServer web(80);
 String gJson = "{}";
 
-static void jRows(String &rows, const char *k, const String &v) {
+static void jRows(String &rows, const String &k, const String &v) {
   if (rows.length()) rows += ",";
   rows += "[";
   rows += "\"";  rows += k;     rows += "\",";
