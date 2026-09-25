@@ -46,19 +46,38 @@ jobs:
       ARDUINO_CLI_VERSION: 1.5.1
     steps:
       - uses: actions/checkout@v7
-      - name: Cache Arduino cores + libraries
-        uses: actions/cache@v6
+      - name: Cache key = the toolchain versions pinned in compile-sketches.sh
+        id: pins
+        run: |
+          pins=$(grep -E '^(ESP32_CORE|AVR_CORE|ESP32_INDEX|AVR_LIBS)=' SMART-DEHUMIDIFIER/scripts/compile-sketches.sh | sha256sum | cut -c1-16)
+          echo "key=arduino-${{ matrix.group }}-cli${ARDUINO_CLI_VERSION}-${pins}" >> "$GITHUB_OUTPUT"
+      - name: Restore Arduino cores + libraries
+        id: cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             ~/.arduino15
             !~/.arduino15/staging
             ~/Arduino/libraries
-          key: arduino-${{ matrix.group }}-cli${{ env.ARDUINO_CLI_VERSION }}-${{ hashFiles('SMART-DEHUMIDIFIER/scripts/compile-sketches.sh') }}
+          key: ${{ steps.pins.outputs.key }}
       - name: Install arduino-cli ${{ env.ARDUINO_CLI_VERSION }}
         run: |
           mkdir -p "$RUNNER_TEMP/arduino-cli"
           curl -fsSL "https://github.com/arduino/arduino-cli/releases/download/v${ARDUINO_CLI_VERSION}/arduino-cli_${ARDUINO_CLI_VERSION}_Linux_64bit.tar.gz" \
             | tar -xz -C "$RUNNER_TEMP/arduino-cli" arduino-cli
           echo "$RUNNER_TEMP/arduino-cli" >> "$GITHUB_PATH"
+      - name: Install cores + libraries
+        run: bash SMART-DEHUMIDIFIER/scripts/compile-sketches.sh ${{ matrix.group }} --setup-only
+      # saved right after setup, so a sketch that fails to compile does not
+      # make every following run re-download the ~1 GB ESP32 toolchain
+      - name: Save Arduino cores + libraries
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.arduino15
+            !~/.arduino15/staging
+            ~/Arduino/libraries
+          key: ${{ steps.pins.outputs.key }}
       - name: scripts/compile-sketches.sh ${{ matrix.group }}
         run: bash SMART-DEHUMIDIFIER/scripts/compile-sketches.sh ${{ matrix.group }}
