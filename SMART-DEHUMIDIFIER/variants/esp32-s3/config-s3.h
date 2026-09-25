@@ -38,7 +38,7 @@
 // =====================================================================
 // Firmware version - shown on the serial banner, the website footer and
 // /api/data; bump it on every release (OTA makes versions matter).
-#define FW_VERSION      "2.0.22"
+#define FW_VERSION      "2.0.23"
 
 #define AP_SSID "AgarbattiDryer"
 #define AP_PASS "dryer1234"          // min 8 chars

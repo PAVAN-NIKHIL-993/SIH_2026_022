@@ -3,6 +3,69 @@
 All notable changes to the Smart Dehumidifier firmware & UI.
 Firmware ships as one file: `arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DEHUMIDIFIER-single-file.ino`.
 
+## 2026-09 (v2.0.23 — DS1307 RTC on I2C, royal blue & golden brown UI)
+
+- **RTC is now a DS1307 on the I2C bus** (the owner's module; the v2.0.21
+  DS1302 driver is replaced).
+  - `src/rtc.*` is a library-free Wire driver at **0x68**: ACK detection,
+    one burst read, CH (clock-halt) flag = untrusted until set, BCD
+    sanity, 12/24 h decoding, writes in 24 h mode with CH cleared, and the
+    same `rtc::` API.
+  - Wiring shares **I2C0**: **S3 SDA 8 / SCL 9** (classic 21 / 22).
+    **VCC 5 V** (the DS1307 needs 4.5–5.5 V). Remove the module's 5 V
+    pull-ups (R2/R3 on "Tiny RTC" boards) or use a level shifter, because
+    ESP32 pins are not 5 V tolerant.
+  - **GPIO 40/42/47 are free again** (S3 spare pool: 3, 11, 40, 42, 47).
+    Enabled on both variants; auto-detected. DS3231 boards work unchanged.
+  - Fixed while porting: the old driver decoded 20:00–23:59 as 00–03 (hours
+    masked with 0x1F in 24 h mode), and the boot `[diag]` line printed the
+    RTC status before the RTC was even probed.
+  - `tools/host-rtc-test` now models the DS1307 on a mock Wire bus
+    (11 cases: late-evening hours, CH, 12 h mode, junk, DS3231 century
+    bit, RAM untouched).
+- **`sensor-tests/rtc-test` rewritten for the DS1307**: an I2C bus scan
+  that names every device, register dump, CH/12-24 h state, SET TIME FROM
+  PHONE with read-back, and 5 V / pull-up hints on failure.
+- **EEPROM guard**: `eelog` probes the chip size. The 4 kB AT24C32 found on
+  DS1307 boards (same 0x50) is left alone instead of being corrupted as a
+  32 kB AT24C256.
+- **Website: royal blue + golden brown, never black.**
+  - A fixed royal-blue sky over a golden-brown horizon with a warm gold
+    seam (a plain blue→brown blend goes muddy grey). It also works on
+    iPhones, which ignore `background-attachment: fixed`.
+  - Glass royal cards with a gold edge and gold titles; golden-brown /
+    royal-blue tabs on a floating glass bar.
+  - Styled buttons (they were unstyled browser grey): gold Start and
+    Save & Start, a golden-brown Reset, a segmented mode control, flat
+    disabled state.
+  - Chart, gauge and badge colours re-tuned for contrast.
+  - Layout fixes: the weight card's Tare/Calibrate row overflowed; gauge
+    units and the MAX HEAT-UP badge wrapped.
+  - 🎨 Theme: six royal / golden presets plus a custom colour. It is
+    stored under a new key, so phones that had saved the old near-black
+    default switch over.
+  - The `/display` kiosk, the `/online` loader, the GitHub Pages UI and all
+    bench-test pages use the same palette.
+- **Every sensor-test phone page was broken**: `/data` sent invalid JSON
+  whenever a card had 2+ rows (the rows array was never bracketed, and
+  single-card pages never closed the card), and the keypad grid emitted
+  `"1,""2,"`. All fixed.
+  - New `tools/sensor-page-test` compiles all 10 sketches on the host
+    (mock Arduino core), for S3 + classic, with nothing / everything
+    connected, and parses the real JSON. It is part of `check-all.sh`
+    step 4.
+- **`tools/preview/serve.js`**: preview the dashboard, kiosk and online UI
+  in a browser with simulated live data. No ESP32 needed.
+- Pin parking: compiled-out modules (TFT, display bridge) no longer
+  reserve their pins, so the S3 spares 3/40/42/47 are parked pull-down as
+  documented. GPIO0 (boot strap) is skipped on the classic too.
+- BOM CSV repaired (an unquoted comma and an unclosed quote swallowed a
+  row). The lowercase "dehummidifier" spelling is fixed in all bench
+  sketches. Docs updated: PIN-MAP, PARAMETERS, PIN-CONFIG, WIRING,
+  PINS-S3-PCF2, manual 02 §4.14 (DS1307 wiring table), manual 03 module
+  table, variants README, sensor-tests README, BOM, checklist, diagrams.
+- `FW_VERSION` 2.0.23.
+
 ## 2026-09 (v2.0.22 — sources restored, every sketch compiled for real)
 
 - **Firmware sources restored exactly to v2.0.21.** The first import (from

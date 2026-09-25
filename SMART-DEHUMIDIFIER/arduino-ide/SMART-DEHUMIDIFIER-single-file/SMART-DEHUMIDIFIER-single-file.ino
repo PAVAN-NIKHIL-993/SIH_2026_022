@@ -44,6 +44,7 @@
  *    NOTE: door hardware OFF - the calibrate->load->ready workflow runs in software
  *    NOTE: supply relay not wired - mode shown + opto verified, switching is manual
  *    NOTE: keypad PCF8574 at 0x20 (never PCF8574A - AHT10 clash)
+ *    NOTE: DS1307 RTC on I2C0 (SDA 21 / SCL 22) at 0x68, VCC 5 V - remove its 5 V pull-ups (R2/R3)
  *
  *  WHAT'S INSIDE (v2.0):
  *    - BOOT: all outputs LOW, splash + power-on beeps, 10 s init window
@@ -115,7 +116,7 @@
 // =====================================================================
 // Firmware version - shown on the serial banner, the website footer and
 // /api/data; bump it on every release (OTA makes versions matter).
-#define FW_VERSION      "2.0.22"
+#define FW_VERSION      "2.0.23"
 
 #define AP_SSID "AgarbattiDryer"
 #define AP_PASS "dryer1234"          // min 8 chars
@@ -379,14 +380,13 @@
 #define PIN_TXDISP_TX   -1
 #define TXDISP_BAUD     9600
 
-// ---- DS1302 RTC: NOT fitted on the classic build (v2.0.21) -------------
-// The classic 30-pin devkit has no free 3-wire slot; the date/time there
-// stays phone-sync + NVS. The S3 variant carries the DS1302 (RST 40 /
-// SCLK 42 / I-O 47) - see variants/esp32-s3/config-s3.h.
-#define RTC_ENABLED    0
-#define PIN_RTC_RST    -1
-#define PIN_RTC_SCLK   -1
-#define PIN_RTC_IO     -1
+// ---- DS1307 RTC on the I2C0 bus (v2.0.23) ------------------------------
+// Same chip + driver as the S3 build, no GPIO of its own: SDA -> GPIO 21,
+// SCL -> GPIO 22 (shared with AHT10 #1 + keypad), VCC -> 5V, GND -> GND.
+// Remove the module's 5 V pull-ups (R2 + R3 on "Tiny RTC" boards) or use a
+// level shifter. Auto-detected - no chip = the phone-sync + NVS clock.
+#define RTC_ENABLED    1
+#define RTC_I2C_ADDR   0x68        // DS1307 (and DS3231) - fixed
 
 // ---- Weigh scale: 2 x half-bridge load cells + HX711 ("dry to weight") -
 // OFF on the classic ESP32: with the display fitted there is NO free
@@ -741,7 +741,9 @@ extern Buzzer buzzer;
  * SUMMARY of EVERY cycle (~817 slots, years of batches) that outlives any
  * filesystem reformat. Wiring: VCC->3V3, GND->GND, SDA/SCL on I2C0
  * (GPIO 8/9), A0/A1/A2->GND = address 0x50. Auto-detected at boot - no
- * chip, no problem (everything else works without it).
+ * chip, no problem (everything else works without it). v2.0.23: a smaller
+ * 24Cxx at 0x50 (e.g. the 4 kB AT24C32 on DS1307 "Tiny RTC" boards) is
+ * recognised and left alone instead of being corrupted as a 32 kB part.
  *
  * Layout: page 0 = header (magic, version, count, head, seq); records of
  * 40 bytes start at 64. Ring buffer: when full, the oldest summary is
@@ -804,34 +806,47 @@ inline void clear()                {}
 /* ==========================  src/rtc.h  ========================== */
 /**
  * @file rtc.h
- * @brief DS1302 real-time clock (date & time) - 3-wire bit-banged,
- *        auto-detected, library-free (v2.0.21).
+ * @brief DS1307 real-time clock (date & time) on the shared I2C bus -
+ *        auto-detected, library-free (v2.0.23; replaced the v2.0.21 DS1302).
  *
- * The DS1302 keeps the wall clock on its own CR2032 coin cell, so the
- * date & time survive a FULL power-down (even a battery disconnect).
- * Without the chip the firmware falls back to the old phone-sync + NVS
- * clock - nothing else changes.
+ * The DS1307 keeps the wall clock on its own coin cell, so the date & time
+ * survive a FULL power-down (even a battery disconnect). Without the chip
+ * the firmware falls back to the old phone-sync + NVS clock - nothing else
+ * changes.
  *
- * Wiring (DS1302 module -> S3):  VCC -> 3V3, GND -> GND,
- *   SCLK -> PIN_RTC_SCLK,  I/O -> PIN_RTC_IO,  RST -> PIN_RTC_RST
- *   (the module's BZ buzzer pin is unused; its battery stays ON the
- *    module and holds the time when the pillar is off).
+ * Wiring (DS1307 module -> ESP32), on the I2C0 bus the AHT10 #1, the PCF8574
+ * keypad and the EEPROM already share - no extra GPIO:
+ *   VCC -> 5V      the DS1307 needs 4.5-5.5 V; at 3.3 V it ignores the bus
+ *   GND -> GND
+ *   SDA -> PIN_I2C0_SDA   (S3: GPIO 8 · classic: GPIO 21)
+ *   SCL -> PIN_I2C0_SCL   (S3: GPIO 9 · classic: GPIO 22)
+ *   SQW, DS, BAT pads: unused.
+ *   !! Most DS1307 boards (the "Tiny RTC" among them) pull SDA/SCL up to
+ *      5 V through R2/R3. ESP32 pins are NOT 5 V tolerant: remove R2 + R3
+ *      (the bus already has 3.3 V pull-ups on the AHT10/PCF boards) or put
+ *      a 3.3 V <-> 5 V I2C level shifter in between. The DS1307 reads 3.3 V
+ *      logic fine (V_IH = 2.2 V); its pull-ups may go to any voltage <= 5.5 V.
+ *   Address 0x68 (fixed). The bus runs at the Wire default of 100 kHz -
+ *   exactly the DS1307's maximum (it has no 400 kHz mode).
  *
  * Behaviour:
- *  - begin(): detects the chip (two identical reads). Write-protect is
- *    always cleared (its power-on state is undefined). A factory-fresh
- *    module ships with the CH (halt) flag set + garbage registers, so
- *    such a time is untrusted until the first real set.
- *  - readTime(): 24 h LOCAL wall clock from the chip (converted to an
- *    absolute epoch using the configured timezone - no TZ env needed).
- *  - writeNow(): system clock -> chip (local time, tzMinutes applied).
- *  - All calls are no-ops (present() == false) when no chip is found
- *    or the RTC pins are -1 (classic variant).
+ *  - begin(): detects the chip (ACK at RTC_I2C_ADDR). A factory-fresh module
+ *    - or one whose coin cell died - has the CH (clock-halt) flag set and/or
+ *    a junk date, so its time is untrusted until the first real set.
+ *  - readTime(): 24 h LOCAL wall clock from the chip, converted to an
+ *    absolute epoch with the configured timezone (no TZ env needed).
+ *    false while the oscillator is halted or the registers are not a time.
+ *  - writeNow(): system clock -> chip (local time, tzMinutes applied,
+ *    24 h mode, CH cleared = oscillator running).
+ *  - All calls are no-ops (present() == false) when no chip answers, and
+ *    compile to stubs with RTC_ENABLED 0.
+ *  - DS3231 boards (3.3 V-native, far more accurate) use the same time
+ *    registers and work with this driver unchanged.
  */
 #include <Arduino.h>
 
 namespace rtc {
-bool  begin();                  // detect + clear write-protect; true = present
+bool  begin();                  // detect (Wire must be started); true = present
 bool  present();                // chip found (does not mean time is good)
 bool  readTime(time_t *outEp);  // true = chip running with a sane time
 void  writeNow();               // system clock -> chip (no-op if absent)
@@ -1428,118 +1443,159 @@ static const char INDEX_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
 <title>Smart Dehumidifier</title>
 <style>
 :root{
---bg:#070b14;--bg2:#0a1120;--card:#0d1526;--card2:#111b30;--line:#1b2740;
---line2:#26365a;--tx:#eef3fb;--dim:#a9b6c9;--dim2:#7c8aa3;
---ok:#34d399;--warn:#e6c25a;--hot:#f87171;--cy:#4cc3ff;--am:#d4af37;
---acc:#3b82f6;--acc2:#1d4ed8;--vio:#a78bfa;--gold:#d4af37;--gold2:#f0d078;
---sh:0 10px 30px rgba(0,0,0,.45);--r:16px}
+--rb:#1b45b5;--rb2:#2a58d0;--rbd:#10307f;--gb:#996515;--gb2:#b8862b;
+--gold:#e9c46a;--gold2:#f6dd9c;
+--bg:#1b45b5;--bg2:rgba(8,24,80,.5);
+--card:rgba(19,48,142,.88);--card2:rgba(30,64,170,.92);
+--line:rgba(233,196,106,.24);--line2:rgba(233,196,106,.46);
+--tx:#fff8ea;--dim:#d6def4;--dim2:#b2c0e4;
+--ok:#4ade80;--warn:#f7c552;--hot:#ff7b7b;--cy:#8fd6ff;--am:#e9c46a;
+--acc:#7aa7ff;--acc2:#2f5fe0;--vio:#c4b5fd;
+--sh:0 10px 28px rgba(6,16,58,.42);--r:16px;
+--lines:repeating-linear-gradient(180deg,rgba(255,255,255,.035) 0 1px,transparent 1px 4px);
+/* v2.0.23 ROYAL & GOLD: royal-blue sky over a golden-brown horizon, joined
+   by a warm gold seam (a plain blue->brown blend turns muddy grey). Never
+   black. The swatches in the header swap --bgimg (themes below). */
+--bgimg:radial-gradient(110% 40% at 50% 74%,rgba(247,201,111,.34),rgba(247,201,111,0) 70%),
+ linear-gradient(180deg,#2352c9 0%,#1d48b8 36%,#3560c8 55%,#c4914a 68%,#a8741d 80%,#8a5a14 100%)}
+body.th-blue{--bgimg:radial-gradient(85% 55% at 100% 108%,rgba(212,162,76,.62),rgba(212,162,76,0) 70%),
+ radial-gradient(90% 60% at 0% -5%,#3f6ae6,rgba(63,106,230,0) 62%),linear-gradient(170deg,#2654d0,#1b45b5 55%,#16389a)}
+body.th-brown{--bgimg:radial-gradient(90% 55% at 0% 0%,rgba(80,120,235,.55),rgba(80,120,235,0) 60%),
+ linear-gradient(180deg,#1d48b8 0%,#3560c8 13%,#c4914a 25%,#a8741d 46%,#8a5a14 100%)}
+body.th-diag{--bgimg:linear-gradient(152deg,#2352c9 0%,#1b45b5 44%,#e1b35a 49.4%,#b98526 51%,#996515 72%,#7d5112 100%)}
+body.th-sapphire{--bgimg:radial-gradient(85% 45% at 100% 108%,rgba(196,145,74,.55),rgba(196,145,74,0) 70%),
+ radial-gradient(90% 60% at 0% 0%,#3561dc,rgba(53,97,220,0) 62%),linear-gradient(170deg,#1a3fa8,#132f8c 60%,#10297a)}
+body.th-bronze{--bgimg:radial-gradient(80% 50% at 100% 0%,rgba(246,221,156,.35),rgba(246,221,156,0) 62%),
+ radial-gradient(70% 45% at 0% 0%,rgba(42,88,208,.6),rgba(42,88,208,0) 60%),linear-gradient(170deg,#b8862b,#996515 50%,#6e4610)}
+body.th-custom{--bgimg:radial-gradient(100% 45% at 50% 105%,rgba(212,162,76,.45),rgba(212,162,76,0) 70%),linear-gradient(var(--bg),var(--bg))}
+body.nolines{--lines:linear-gradient(transparent,transparent)}
 *{box-sizing:border-box;margin:0;padding:0}
-html{-webkit-text-size-adjust:100%}
-body{background:radial-gradient(1200px 500px at 85% -10%,#101d3a 0%,var(--bg) 55%),
- repeating-linear-gradient(180deg,rgba(158,175,199,.05) 0 1px,transparent 1px 4px),
- var(--bg);background-attachment:fixed;color:var(--tx);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-padding-bottom:56px;font-variant-numeric:tabular-nums}
+html{-webkit-text-size-adjust:100%;background:#1b45b5}
+body{color:var(--tx);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+padding-bottom:56px;font-variant-numeric:tabular-nums;min-height:100vh}
+/* fixed backdrop layer (background-attachment:fixed is ignored on iOS) */
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+background:var(--lines),var(--bgimg)}
 button,input,select{font:inherit}
 /* ---------- header ---------- */
 header{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;
 justify-content:space-between;padding:16px 20px 14px;
-border-bottom:1px solid var(--line);
-background:linear-gradient(180deg,rgba(212,175,55,.07),transparent)}
+border-bottom:1px solid rgba(233,196,106,.5);
+background:linear-gradient(180deg,rgba(12,34,104,.66),rgba(12,34,104,.3));
+box-shadow:0 6px 22px rgba(6,16,58,.22)}
 .brand{display:flex;gap:12px;align-items:center}
-.logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
-font-size:20px;background:linear-gradient(135deg,#1e3a8a,#3b82f6);
-box-shadow:inset 0 0 0 1px rgba(212,175,55,.5),var(--sh)}
-header h1{font-size:17px;font-weight:700;letter-spacing:.2px}
+.logo{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;
+font-size:21px;background:linear-gradient(135deg,#f6dd9c,#b8862b 55%,#7a4f12);
+box-shadow:inset 0 0 0 1px rgba(255,248,234,.6),var(--sh)}
+header h1{font-size:17px;font-weight:750;letter-spacing:.5px;color:var(--gold2);
+text-shadow:0 1px 3px rgba(6,16,58,.4)}
 header .sub{color:var(--dim);font-size:11.5px;margin-top:1px}
 .hstat{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .pill{display:inline-flex;align-items:center;gap:7px;padding:6px 13px;border-radius:999px;
 font-size:12px;font-weight:700;letter-spacing:.6px;border:1px solid var(--line2);
-background:var(--card);color:var(--dim)}
+background:rgba(10,30,96,.58);color:var(--dim);white-space:nowrap}
+button.pill{cursor:pointer}button.pill:hover{border-color:var(--gold);color:var(--tx)}
 .pill .dot{width:8px;height:8px;border-radius:50%;background:currentColor;
 box-shadow:0 0 10px currentColor;animation:pulse 2s infinite}
 @keyframes pulse{50%{opacity:.45}}
-.p-idle{color:var(--dim)}.p-run{color:var(--ok);border-color:#1d4ed8}
-.p-purge{color:var(--warn);border-color:#6b5410}.p-done{color:var(--acc);border-color:#1e3a8a}
-.p-fault{color:var(--hot);border-color:#881337}.p-by{color:var(--warn)}
-#clock{font-size:12.5px;color:var(--dim);border:1px solid var(--line);
-border-radius:10px;padding:5px 11px;background:var(--bg2)}
-/* ---------- tabs ---------- */
-nav{display:flex;gap:8px;padding:14px 16px 4px;max-width:940px;margin:0 auto;
-position:sticky;top:0;z-index:40;background:linear-gradient(180deg,var(--bg) 82%,transparent)}
-nav button{flex:1;padding:12px 8px;border:2px solid rgba(76,195,255,.9);border-radius:13px;
-font-size:13.5px;font-weight:750;cursor:pointer;transition:.18s;letter-spacing:.3px;
-box-shadow:0 0 12px rgba(76,195,255,.5),inset 0 0 10px rgba(255,255,255,.22)}
-nav button.fire{background:linear-gradient(120deg,#92400e,#f59e0b 30%,#fde68a 50%,#f59e0b 70%,#92400e);
-background-size:200% 100%;color:#3b1d00}
-nav button.water{background:linear-gradient(120deg,#1e3a8a,#3b82f6 30%,#bfdbfe 50%,#3b82f6 70%,#1e3a8a);
-background-size:200% 100%;color:#061638}
-nav button:hover{transform:translateY(-1px);filter:brightness(1.15);
-box-shadow:0 0 16px rgba(76,195,255,.75),0 0 22px rgba(212,175,55,.3)}
-nav button.on{animation:shine 3s linear infinite;
-box-shadow:0 0 18px rgba(76,195,255,.85),0 0 28px rgba(212,175,55,.4),inset 0 0 14px rgba(255,255,255,.3)}
+.p-idle{color:var(--dim)}.p-run{color:var(--ok);border-color:rgba(74,222,128,.55)}
+.p-purge{color:var(--warn);border-color:rgba(247,197,82,.6)}.p-done{color:#c9dbff;border-color:rgba(122,167,255,.65)}
+.p-fault{color:#ffc4c4;border-color:rgba(255,123,123,.75);background:rgba(120,18,34,.55)}.p-by{color:var(--warn)}
+#clock{font-size:12.5px;color:var(--tx);border:1px solid var(--line);
+border-radius:10px;padding:5px 11px;background:rgba(10,30,96,.58);white-space:nowrap}
+/* ---------- tabs: golden-brown + royal-blue, on a floating glass bar ---------- */
+nav{display:flex;gap:10px;padding:12px 16px 12px;max-width:940px;margin:0 auto;
+position:sticky;top:0;z-index:40;background:rgba(14,38,116,.62);
+-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+border:1px solid rgba(233,196,106,.28);border-top:0;border-radius:0 0 18px 18px;
+box-shadow:0 8px 22px rgba(6,16,58,.28)}
+nav button{flex:1;padding:12px 8px;border:1.5px solid rgba(246,221,156,.85);border-radius:13px;
+font-size:13.5px;font-weight:750;cursor:pointer;transition:.18s;letter-spacing:.3px;opacity:.86;
+box-shadow:0 0 10px rgba(233,196,106,.3),inset 0 0 10px rgba(255,255,255,.2)}
+nav button.fire{background:linear-gradient(120deg,#b8862b,#e3b75f 30%,#f6dd9c 50%,#e3b75f 70%,#b8862b);
+background-size:200% 100%;color:#2b1a02}
+nav button.water{background:linear-gradient(120deg,#6f95f5,#9db8ff 30%,#dbe6ff 50%,#9db8ff 70%,#6f95f5);
+background-size:200% 100%;color:#06163f}
+nav button:hover{transform:translateY(-1px);opacity:1;filter:brightness(1.08);
+box-shadow:0 0 16px rgba(233,196,106,.55)}
+nav button.on{opacity:1;animation:shine 3s linear infinite;
+box-shadow:0 0 18px rgba(233,196,106,.7),0 0 26px rgba(122,167,255,.35),inset 0 0 14px rgba(255,255,255,.3)}
 @keyframes shine{0%{background-position:0% 0}100%{background-position:200% 0}}
-.bgsw{display:inline-block;width:27px;height:27px;border-radius:9px;margin:3px;cursor:pointer;
-border:1px solid var(--line2);box-shadow:inset 0 0 7px rgba(255,255,255,.25),0 0 6px rgba(76,195,255,.25)}
-body.nolines{background-image:radial-gradient(1200px 500px at 85% -10%,#101d3a 0%,var(--bg) 55%)}
+.bgsw{display:inline-block;width:30px;height:30px;border-radius:9px;margin:3px;cursor:pointer;
+border:1px solid var(--line2);box-shadow:inset 0 0 7px rgba(255,255,255,.25),0 0 6px rgba(233,196,106,.3)}
+.bgsw.on{outline:2px solid var(--gold);outline-offset:2px}
 /* ---------- layout ---------- */
 section{display:none;padding:14px 16px;max-width:940px;margin:0 auto;animation:fadein .25s}
 section.on{display:block}
+section>h2{text-shadow:0 1px 3px rgba(6,16,58,.45)}
 @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px}
-.card{background:linear-gradient(180deg,var(--card),var(--bg2));border:1px solid var(--line);
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.card{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);
 border-radius:var(--r);padding:15px 16px;box-shadow:var(--sh);position:relative;overflow:hidden}
-.card h3{color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:1.1px;
-font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.card::before,.chartbox::before,.fsec::before{content:"";position:absolute;left:12%;right:12%;top:0;height:1px;
+background:linear-gradient(90deg,transparent,rgba(246,221,156,.85),transparent)}
+.card h3{color:var(--gold2);font-size:10.5px;text-transform:uppercase;letter-spacing:1.2px;
+font-weight:750;margin-bottom:8px;display:flex;align-items:center;gap:7px}
 .card h3 .sp{flex:1}
-.big{font-size:31px;font-weight:750;letter-spacing:-.5px}
+.big{font-size:31px;font-weight:750;letter-spacing:-.5px;white-space:nowrap}
 .unit{font-size:13px;color:var(--dim);font-weight:500}
 .sml{font-size:11.5px;color:var(--dim);margin-top:5px}
 .sml b{color:var(--tx);font-weight:650}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);
-margin-right:4px;box-shadow:0 0 8px rgba(52,211,153,.7)}
-.dot.off{background:var(--hot);box-shadow:0 0 8px rgba(251,113,133,.7)}
+margin-right:4px;box-shadow:0 0 8px rgba(74,222,128,.7)}
+.dot.off{background:var(--hot);box-shadow:0 0 8px rgba(255,123,123,.7)}
 /* ---------- gauges ---------- */
 .gwrap{display:flex;align-items:center;gap:14px}
-.gring{width:104px;height:104px;flex:none}
-.gring .bgc{fill:none;stroke:#1c2836;stroke-width:9}
+.gring{width:100px;height:100px;flex:none}
+.gring .bgc{fill:none;stroke:rgba(255,255,255,.14);stroke-width:9}
 .gring .fgc{fill:none;stroke-width:9;stroke-linecap:round;
 transition:stroke-dashoffset .8s cubic-bezier(.22,1,.36,1)}
 .gring .mk{stroke:var(--tx);stroke-width:2.5;stroke-linecap:round;opacity:.85}
-.gval{font-size:27px;font-weight:750;line-height:1.05}
+.gval{font-size:27px;font-weight:750;line-height:1.05;white-space:nowrap}
 .gmeta{font-size:11px;color:var(--dim);margin-top:3px}
 /* ---------- bars ---------- */
-.bar{height:9px;border-radius:6px;background:#0c1118;border:1px solid var(--line);
+.bar{height:9px;border-radius:6px;background:rgba(6,18,64,.55);border:1px solid var(--line);
 overflow:hidden;margin-top:9px}
 .bar i{display:block;height:100%;border-radius:6px;transition:width .8s}
-.bar.heat i{background:linear-gradient(90deg,#b45309,var(--hot));box-shadow:0 0 12px rgba(251,113,133,.45)}
-.bar.fan i{background:linear-gradient(90deg,#0369a1,var(--cy));box-shadow:0 0 12px rgba(56,189,248,.4)}
+.bar.heat i{background:linear-gradient(90deg,#b8862b,#ff9a76);box-shadow:0 0 12px rgba(255,154,118,.45)}
+.bar.fan i{background:linear-gradient(90deg,#4f7df0,var(--cy));box-shadow:0 0 12px rgba(143,214,255,.4)}
 /* ---------- controls ---------- */
 .controls{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
-button.act{padding:12px 20px;border:none;border-radius:13px;font-size:14px;font-weight:750;
-cursor:pointer;transition:.16s;letter-spacing:.3px;box-shadow:0 6px 16px rgba(0,0,0,.35)}
+button.act{padding:12px 20px;border:1px solid var(--line2);border-radius:13px;font-size:14px;font-weight:750;
+cursor:pointer;transition:.16s;letter-spacing:.3px;color:var(--tx);
+background:linear-gradient(180deg,rgba(50,88,200,.96),rgba(26,60,164,.96));box-shadow:0 6px 16px rgba(6,16,58,.35)}
 button.act:hover:not(:disabled){transform:translateY(-2px);filter:brightness(1.12)}
 button.act:active:not(:disabled){transform:translateY(0)}
-button.act:disabled{opacity:.32;cursor:not-allowed;box-shadow:none}
-#btnStart{background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;
-box-shadow:0 6px 18px rgba(59,130,246,.35)}
-#btnStop{background:linear-gradient(135deg,#e11d48,#be123c);color:#fff}
-#btnPower{background:linear-gradient(135deg,#0284c7,#0369a1);color:#e0f2fe}
-#btnAdd{background:var(--card2);color:var(--tx);border:1px solid var(--line2)}
+button.act:disabled{cursor:not-allowed;box-shadow:none!important;background:rgba(8,24,80,.45)!important;
+color:rgba(255,248,234,.45)!important;border-color:rgba(233,196,106,.2)!important}
+#btnStart,#btnGo{background:linear-gradient(135deg,#f6dd9c,#d4a24c 45%,#b8862b);color:#2b1a02;
+border-color:rgba(255,248,234,.65);box-shadow:0 6px 18px rgba(184,134,43,.45)}
+#btnStop{background:linear-gradient(135deg,#f04262,#be123c);color:#fff;border-color:rgba(255,200,205,.5)}
+#btnPower{background:linear-gradient(135deg,#4f7df0,#1d48b8);color:#eef4ff}
+#btnDef{background:linear-gradient(135deg,#c9973a,#996515 55%,#7a4f12);color:#fff8ea;border-color:var(--gold2)}
+.tabbtn{padding:10px 8px;border-radius:11px;border:1px solid var(--line2);background:rgba(8,24,80,.45);
+color:var(--dim);font-weight:750;font-size:12.5px;letter-spacing:.4px;cursor:pointer;transition:.15s}
+.tabbtn:hover{color:var(--tx);border-color:var(--gold)}
+.tabbtn.on{background:linear-gradient(135deg,#f6dd9c,#d4a24c 50%,#b8862b);color:#2b1a02;
+border-color:rgba(255,248,234,.7);box-shadow:0 0 12px rgba(233,196,106,.45)}
+.wtctl{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
+.wtctl input{grid-column:1/-1;padding:8px 11px}
+.wtctl button.act{padding:9px 10px;font-size:13px}
 /* ---------- chart ---------- */
-.chartbox{background:linear-gradient(180deg,var(--card),var(--bg2));border:1px solid var(--line);
-border-radius:var(--r);padding:15px;margin-top:12px;box-shadow:var(--sh)}
-.chartbox>b{font-size:13px}
+.chartbox{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);
+border-radius:var(--r);padding:15px;margin-top:12px;box-shadow:var(--sh);position:relative}
+.chartbox>b{font-size:13px;color:var(--gold2)}
 .legend{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 6px}
 .lg{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;
 border:1px solid var(--line2);background:var(--bg2);color:var(--dim);font-size:11.5px;
 font-weight:650;cursor:pointer;transition:.15s;user-select:none}
 .lg:hover{color:var(--tx)}
 .lg i{width:9px;height:9px;border-radius:3px;background:var(--c)}
-.lg.on{color:var(--tx);border-color:color-mix(in srgb,var(--c) 55%,transparent);
-background:color-mix(in srgb,var(--c) 14%,var(--bg2))}
+.lg.on{color:var(--tx);border-color:color-mix(in srgb,var(--c) 60%,transparent);
+background:color-mix(in srgb,var(--c) 22%,rgba(8,24,80,.5))}
 canvas{width:100%;display:block;border-radius:10px}
 #chart,#cycChart{height:250px}
-.tip{position:absolute;pointer-events:none;background:rgba(10,15,21,.94);border:1px solid var(--line2);
+.tip{position:absolute;pointer-events:none;background:rgba(10,28,90,.96);border:1px solid var(--line2);
 border-radius:10px;padding:8px 11px;font-size:11.5px;line-height:1.7;opacity:0;
 transition:opacity .12s;z-index:60;white-space:nowrap;box-shadow:var(--sh)}
 .tip b{font-weight:700}
@@ -1548,82 +1604,89 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 td,th{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left}
 tr:last-child td{border-bottom:none}
 td:last-child,th:last-child{text-align:right}
-th{color:var(--dim2);font-size:10px;text-transform:uppercase;letter-spacing:1px}
+th{color:var(--gold2);font-size:10px;text-transform:uppercase;letter-spacing:1px;opacity:.9}
 tbody tr{transition:.12s}
-tbody tr:hover{background:rgba(56,189,248,.05)}
+tbody tr:hover{background:rgba(233,196,106,.07)}
 td:last-child{font-weight:700}
 .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;
-font-weight:750;letter-spacing:.4px}
-.b-idle{background:#1d2839;color:var(--dim)}.b-run{background:#14264d;color:#8ab4ff}
-.b-purge{background:#3a3010;color:var(--gold2)}.b-done{background:#14264d;color:#8ab4ff}
-.b-fault{background:#3d1420;color:var(--hot)}.b-by{background:#3a2f10;color:var(--warn)}
+font-weight:750;letter-spacing:.4px;white-space:nowrap}
+.b-idle{background:rgba(255,255,255,.14);color:var(--dim)}.b-run{background:rgba(122,167,255,.26);color:#dfe9ff}
+.b-purge{background:rgba(233,196,106,.24);color:var(--gold2)}.b-done{background:rgba(122,167,255,.26);color:#dfe9ff}
+.b-fault{background:rgba(255,123,123,.24);color:#ffcaca}.b-by{background:rgba(247,197,82,.24);color:var(--warn)}
 a.dl{color:var(--cy);font-size:13px;text-decoration:none;font-weight:650}
 a.dl:hover{text-decoration:underline}
-.vbtn{background:var(--card2);border:1px solid var(--line2);color:var(--cy);border-radius:9px;
+.vbtn{background:rgba(8,24,80,.45);border:1px solid var(--line2);color:var(--cy);border-radius:9px;
 padding:5px 10px;font-size:11.5px;font-weight:700;cursor:pointer}
-.vbtn:hover{border-color:var(--cy)}
+.vbtn:hover{border-color:var(--gold)}
 /* ---------- forms ---------- */
 form{background:none;border:none;padding:0}
-.fsec{background:linear-gradient(180deg,var(--card),var(--bg2));border:1px solid var(--line);
-border-radius:var(--r);padding:15px;margin-bottom:12px;box-shadow:var(--sh)}
-.fsec>h4{font-size:11px;text-transform:uppercase;letter-spacing:1.1px;color:var(--acc);
+.fsec{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);
+border-radius:var(--r);padding:15px;margin-bottom:12px;box-shadow:var(--sh);position:relative}
+.fsec>h4{font-size:11px;text-transform:uppercase;letter-spacing:1.1px;color:var(--gold2);
 margin-bottom:11px;display:flex;gap:8px;align-items:center}
 .frow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:10px}
 .frow:last-child{margin-bottom:0}
 label{font-size:11px;color:var(--dim);display:block;margin-bottom:5px;font-weight:600;
 letter-spacing:.2px}
 input,select{width:100%;padding:10px 12px;border-radius:11px;border:1px solid var(--line2);
-background:#0b1119;color:var(--tx);font-size:14.5px;transition:.15s}
-input:focus,select:focus{outline:none;border-color:var(--acc);
-box-shadow:0 0 0 3px rgba(45,212,191,.15)}
-input[type=number]::-webkit-inner-spin-button{opacity:.4}
+background:rgba(8,24,80,.6);color:var(--tx);font-size:14.5px;transition:.15s}
+input:focus,select:focus{outline:none;border-color:var(--gold);
+box-shadow:0 0 0 3px rgba(233,196,106,.22)}
+input[type=number]::-webkit-inner-spin-button{opacity:.5}
+input[type=range]{padding:0;border:0;background:none;box-shadow:none}
+input[type=color]{width:46px;height:30px;padding:2px;flex:none}
+input[type=checkbox]{width:18px;height:18px;flex:none;accent-color:#e9c46a}
+select option{background:#10307f;color:var(--tx)}
 details{margin:10px 0 0;padding:11px 13px;border:1px dashed var(--line2);border-radius:12px;
-background:rgba(0,0,0,.12)}
+background:rgba(8,24,80,.3)}
 summary{color:var(--dim);cursor:pointer;font-size:12.5px;font-weight:600}
 summary:hover{color:var(--tx)}
 .chk{display:flex;align-items:center;gap:11px;font-size:13.5px;color:var(--tx);
 padding:10px 2px;cursor:pointer;user-select:none}
 .chk input{appearance:none;-webkit-appearance:none;width:42px;height:24px;border-radius:999px;
-background:#233044;border:1px solid var(--line2);position:relative;cursor:pointer;
-transition:.2s;flex:none}
+background:rgba(255,255,255,.18);border:1px solid var(--line2);position:relative;cursor:pointer;
+transition:.2s;flex:none;padding:0}
 .chk input::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;
-border-radius:50%;background:#8aa0b4;transition:.2s}
-.chk input:checked{background:linear-gradient(135deg,var(--acc),var(--acc2));
-border-color:transparent}
-.chk input:checked::after{left:20px;background:#04211c}
+border-radius:50%;background:#dfe6f7;transition:.2s}
+.chk input:checked{background:linear-gradient(135deg,#f6dd9c,#b8862b);border-color:transparent}
+.chk input:checked::after{left:20px;background:#fff8ea}
 .chk input:checked+span{color:var(--tx)}
 /* ---------- misc ---------- */
-.fault{background:linear-gradient(135deg,#3d1420,#250a12);border:1px solid #881337;
-color:#fda4af;padding:12px 15px;border-radius:13px;margin-bottom:12px;display:none;
+.fault{background:linear-gradient(135deg,rgba(158,22,48,.94),rgba(98,10,30,.94));border:1px solid #ff8a9a;
+color:#ffe3e7;padding:12px 15px;border-radius:13px;margin-bottom:12px;display:none;
 font-weight:650;box-shadow:var(--sh)}
 #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(8px);
-background:linear-gradient(135deg,var(--acc),var(--acc2));color:#03271d;padding:11px 22px;
+background:linear-gradient(135deg,#f6dd9c,#b8862b);color:#2b1a02;padding:11px 22px;
 border-radius:999px;font-weight:750;font-size:13.5px;opacity:0;transition:.25s;
-pointer-events:none;z-index:99;box-shadow:0 10px 30px rgba(45,212,191,.35)}
-#toast.err{background:linear-gradient(135deg,#e11d48,#be123c);color:#fff}
+pointer-events:none;z-index:99;box-shadow:0 10px 30px rgba(184,134,43,.45)}
+#toast.err{background:linear-gradient(135deg,#f04262,#be123c);color:#fff}
 .note{font-size:11.5px;color:var(--dim2);margin-top:8px}
 .note b{color:var(--dim)}
+/* notes that sit straight on the backdrop get a glass strip (readable on gold too) */
+section>.note{background:rgba(14,38,116,.86);border:1px solid var(--line);border-radius:12px;
+padding:8px 12px;color:var(--dim)}
+section>.note b{color:var(--tx)}
 .wxbox{display:flex;gap:13px;align-items:flex-start}
 .wxicon{font-size:37px;line-height:1;filter:drop-shadow(0 4px 10px rgba(0,0,0,.4))}
 .wxrows{font-size:12px;color:var(--dim);line-height:1.85;margin-top:2px}
 .wxrows b{color:var(--tx);font-weight:650}
 /* v2.0.19: virtual keypad drawer (touch displays) */
 #vpDrawer{display:none;position:fixed;top:0;right:0;bottom:0;width:min(400px,100vw);
-background:var(--card);border-left:1px solid var(--line2);box-shadow:var(--sh);
+background:linear-gradient(180deg,#1d48b8,#10307f 70%,#7a4f12);border-left:1px solid var(--line2);box-shadow:var(--sh);
 z-index:80;flex-direction:column;padding:14px;gap:10px;overflow:auto}
 #vpDrawer.on{display:flex}
 #vpHead{display:flex;justify-content:space-between;align-items:center}
-#vpText{flex:1;overflow:auto;font-size:13px;line-height:2;color:var(--dim);
+#vpText{flex:1;overflow:auto;font-size:13px;line-height:2;color:var(--dim);background:rgba(8,24,80,.4);
 border:1px dashed var(--line2);border-radius:10px;padding:10px;min-height:110px}
 .vpRow{display:flex;justify-content:space-between;gap:10px}
-.vpSel{color:var(--tx);font-weight:700}
+.vpSel{color:var(--gold2);font-weight:700}
 .vpPad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .vpPad button{padding:12px 0;font-size:17px;font-weight:700;border-radius:12px;
-border:1px solid var(--line2);background:#101923;color:var(--tx);cursor:pointer}
-.vpPad button:active{transform:scale(.93);background:#182535}
+border:1px solid var(--line2);background:rgba(8,24,80,.55);color:var(--tx);cursor:pointer}
+.vpPad button:active{transform:scale(.93);background:rgba(233,196,106,.28)}
 .vpPad button small{display:block;font-size:9px;font-weight:600;color:var(--dim)}
-@media(max-width:560px){.big{font-size:26px}.gval{font-size:23px}
-header{padding:13px 14px}nav button{font-size:12.5px;padding:10px 4px}}
+@media(max-width:560px){.big{font-size:26px}.gval{font-size:23px}.gring{width:88px;height:88px}
+header{padding:13px 14px}nav{padding:10px 12px}nav button{font-size:12.5px;padding:10px 4px}}
 </style></head><body>
 <header>
   <div class="brand"><div class="logo">&#127807;</div>
@@ -1637,11 +1700,11 @@ header{padding:13px 14px}nav button{font-size:12.5px;padding:10px 4px}}
     <a href="/display" target="_blank" class="pill p-run" style="text-decoration:none">&#128421; Display view</a>
     <button class="pill" onclick="vpOpen()" title="Virtual 4x4 keypad - the on-device menu, by touch">&#9000; Keypad</button>
     <span style="position:relative">
-      <button class="pill" onclick="toggleBg()" title="Change background">&#127912;</button>
+      <button class="pill" onclick="toggleBg()" title="Theme / background">&#127912; Theme</button>
       <div id="bgPanel" style="display:none;position:absolute;right:0;top:44px;z-index:60;
-        background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:12px;
-        box-shadow:var(--sh);width:236px">
-        <div style="font-size:12px;color:var(--dim);margin-bottom:8px;font-weight:700">BACKGROUND</div>
+        background:linear-gradient(180deg,#2350c8,#12318a);border:1px solid var(--line2);border-radius:14px;padding:12px;
+        box-shadow:var(--sh);width:250px">
+        <div style="font-size:12px;color:var(--gold2);margin-bottom:8px;font-weight:700">THEME &middot; royal blue &amp; golden brown</div>
         <div id="bgSwatches"></div>
         <label style="display:flex;gap:7px;align-items:center;font-size:12px;color:var(--dim);margin-top:9px">
           <input type="checkbox" id="bgLines" onchange="bgSet()"> hair lines</label>
@@ -1660,8 +1723,8 @@ header{padding:13px 14px}nav button{font-size:12.5px;padding:10px 4px}}
 <!-- ================= SLIDE: DASHBOARD ================= -->
 <section id="secDash" class="on">
   <div id="faultBox" class="fault"></div>
-  <div id="warnBox" class="fault" style="background:linear-gradient(135deg,#3a2f10,#241d08);border-color:#a16207;display:none"></div>
-  <div id="doneCard" class="fault" style="background:linear-gradient(135deg,#0d2818,#05140b);border-color:#166534;display:none"></div>
+  <div id="warnBox" class="fault" style="background:linear-gradient(135deg,rgba(184,134,43,.95),rgba(122,79,18,.95));border-color:#f6dd9c;color:#fff8ea;display:none"></div>
+  <div id="doneCard" class="fault" style="background:linear-gradient(135deg,rgba(22,110,58,.94),rgba(10,66,36,.94));border-color:#5ee89a;color:#eafff1;display:none"></div>
   <div class="controls">
     <button class="act" id="btnStart" onclick="api('/api/start')">&#9654; Start</button>
     <button class="act" id="btnStop" onclick="api('/api/stop')">&#9632; Stop</button>
@@ -1669,7 +1732,7 @@ header{padding:13px 14px}nav button{font-size:12.5px;padding:10px 4px}}
     <button class="act" id="btnPower" onclick="api('/api/power')">&#9211; Power On</button>
   </div>
   <!-- v2.0.18: cycle-data downloads right on the home page -->
-  <div class="note" style="margin:8px 0 0">&#128190; <b>Cycle data:</b>
+  <div class="note" style="margin:8px 0 12px">&#128190; <b>Cycle data:</b>
     <a class="dl" href="/eelog.csv" download>&#11015; ALL cycles &mdash; EEPROM registry (<span id="eeN2">--</span>)</a>
     &nbsp;&middot;&nbsp;
     <a class="dl" href="/lastcycle.csv" download>&#11015; latest cycle &mdash; full detail</a>
@@ -1681,7 +1744,7 @@ header{padding:13px 14px}nav button{font-size:12.5px;padding:10px 4px}}
       <div class="gwrap">
         <svg class="gring" viewBox="0 0 120 120">
           <circle class="bgc" cx="60" cy="60" r="52"/>
-          <circle class="fgc" id="g_t" cx="60" cy="60" r="52" stroke="#d4af37"
+          <circle class="fgc" id="g_t" cx="60" cy="60" r="52" stroke="#f2c14e"
             stroke-dasharray="326.7" stroke-dashoffset="326.7"
             transform="rotate(-90 60 60)"/>
           <line class="mk" id="g_tmark" x1="60" y1="6" x2="60" y2="17"
@@ -1715,7 +1778,7 @@ header{padding:13px 14px}nav button{font-size:12.5px;padding:10px 4px}}
       <div class="gwrap">
         <svg class="gring" viewBox="0 0 120 120">
           <circle class="bgc" cx="60" cy="60" r="52"/>
-          <circle class="fgc" id="g_b" cx="60" cy="60" r="52" stroke="#5fa8ff"
+          <circle class="fgc" id="g_b" cx="60" cy="60" r="52" stroke="#6ee7b7"
             stroke-dasharray="326.7" stroke-dashoffset="326.7"
             transform="rotate(-90 60 60)"/>
         </svg>
@@ -1731,11 +1794,10 @@ header{padding:13px 14px}nav button{font-size:12.5px;padding:10px 4px}}
       <div class="sml" id="wtTgt">no target set</div>
       <div class="sml">losing <b id="wtRate">--</b> g/min &middot; dry-to-weight
       <b id="wtMode">off</b></div>
-      <div style="margin-top:8px;display:flex;gap:8px">
-        <button class="act" style="flex:1;padding:9px" onclick="espFetch('/api/scale?tare=1',{method:'POST'}).then(r=>toast(r.ok?'Tared':'Error')).catch(()=>toast('Offline',1))">&#9878; Tare</button>
-        <input type="number" id="calG" placeholder="known g" step="10" min="10"
-               style="width:90px;background:var(--bg2);border:1px solid var(--line2);border-radius:10px;color:var(--tx);padding:6px 8px">
-        <button class="act" style="flex:1;padding:9px" onclick="scaleCal()">&#9878; Calibrate</button>
+      <div class="wtctl">
+        <input type="number" id="calG" placeholder="known weight (g)" step="10" min="10">
+        <button class="act" onclick="espFetch('/api/scale?tare=1',{method:'POST'}).then(r=>toast(r.ok?'Tared':'Error')).catch(()=>toast('Offline',1))">&#9878; Tare</button>
+        <button class="act" onclick="scaleCal()">&#9878; Calibrate</button>
       </div>
       <div class="sml">put a known weight on the trays, type its grams, Calibrate</div>
     </div>
@@ -1825,7 +1887,7 @@ header{padding:13px 14px}nav button{font-size:12.5px;padding:10px 4px}}
     </table></div>
     <div class="controls" style="margin:10px 0 0">
       <button class="act" id="btnClearCyc" onclick="clearCycles()"
-        style="background:#3d1420;color:#fda4af">&#128465; Clear history</button></div>
+        style="background:linear-gradient(135deg,rgba(170,24,52,.85),rgba(110,12,32,.85));color:#ffe3e7;border-color:rgba(255,138,154,.6)">&#128465; Clear history</button></div>
     <div class="note">Download shows every reading of that run: time, temp, RH, heater %,
       fan %, battery. Status: <b style="color:var(--ok)">completed</b> &middot;
       <b style="color:var(--warn)">stopped</b> &middot; <b style="color:var(--hot)">fault</b>
@@ -1916,7 +1978,7 @@ header{padding:13px 14px}nav button{font-size:12.5px;padding:10px 4px}}
       <div class="frow">
         <div><label>Set date &amp; time manually</label><input type="datetime-local" id="f_dt"></div>
         <div><label>&nbsp;</label><button class="act" onclick="setClockManual()"
-          style="width:100%;background:linear-gradient(135deg,#0284c7,#0369a1);color:#e0f2fe">&#9201; Set clock</button></div>
+          style="width:100%">&#9201; Set clock</button></div>
         <div><label>Timezone offset (min)</label><input type="number" id="f_tz" step="15" min="-720" max="840"></div>
       </div></div>
     <div class="fsec"><h4>&#127987; Batch calculator &mdash; sticks &amp; paste (fills the target weight)</h4>
@@ -1992,23 +2054,33 @@ async function applyDefaults(){
     S=j;DEF=j.defs||DEF;fillForm(S.set);fillDef();toast('Defaults applied')
   }catch(e){toast('Offline',1)}}
 
-// ---------- background personalisation (persists on this phone) ---------
-var bgCur={c:'#070b14',lines:true};
-const BGP=[{n:'Navy',c:'#070b14'},{n:'Midnight',c:'#0b1026'},{n:'Deep Blue',c:'#0a1a33'},
-           {n:'Graphite',c:'#14161a'},{n:'Warm Dark',c:'#1c1508'},{n:'Royal',c:'#101a3f'}];
-function bgApply(c,lines){bgCur={c:c,lines:lines};
-  document.body.style.setProperty('--bg',c);
-  document.body.classList.toggle('nolines',!lines);
-  try{localStorage.setItem('dryerBg',JSON.stringify(bgCur))}catch(e){}}
-function bgSet(custom){var c=custom||bgCur.c;bgApply(c,$('bgLines').checked)}
+// ---------- background: royal blue + golden brown themes (per phone) -----
+// v2.0.23: never black. Stored under a NEW key - phones that saved the old
+// near-black default under 'dryerBg' start on Royal & Gold instead.
+var bgCur={t:'royal',c:'#1b45b5',lines:true};
+const BGP=[{n:'Royal & Gold',t:'royal',s:'linear-gradient(180deg,#2352c9 0 45%,#c4914a 62%,#8a5a14)'},
+ {n:'Royal Blue',t:'blue',s:'linear-gradient(160deg,#2654d0,#16389a 70%,#b8862b)'},
+ {n:'Golden Brown',t:'brown',s:'linear-gradient(180deg,#1d48b8 0 18%,#c4914a 32%,#8a5a14)'},
+ {n:'Royal / Gold diagonal',t:'diag',s:'linear-gradient(152deg,#1b45b5 0 46%,#e1b35a 50%,#996515 56%)'},
+ {n:'Sapphire',t:'sapphire',s:'linear-gradient(160deg,#1a3fa8,#10297a 70%,#c4914a)'},
+ {n:'Bronze',t:'bronze',s:'linear-gradient(160deg,#2a58d0 0 18%,#b8862b 38%,#6e4610)'}];
+function bgPaint(){var b=document.body;
+  BGP.forEach(function(x){b.classList.remove('th-'+x.t)});b.classList.remove('th-custom');
+  b.classList.add('th-'+bgCur.t);b.classList.toggle('nolines',!bgCur.lines);
+  if(bgCur.t==='custom')b.style.setProperty('--bg',bgCur.c);else b.style.removeProperty('--bg');
+  document.querySelectorAll('.bgsw').forEach(function(e){e.classList.toggle('on',e.dataset.t===bgCur.t)});
+  try{localStorage.setItem('dryerTheme',JSON.stringify(bgCur))}catch(e){}}
+function bgTheme(t){bgCur={t:t,c:bgCur.c,lines:bgCur.lines};bgPaint()}
+function bgApply(c,lines){bgCur={t:'custom',c:c,lines:lines};bgPaint()}   // custom colour
+function bgSet(custom){if(custom)bgApply(custom,$('bgLines').checked);
+  else{bgCur.lines=$('bgLines').checked;bgPaint()}}
 function toggleBg(){var p=$('bgPanel');p.style.display=p.style.display==='none'?'block':'none'}
 function initBg(){
-  try{var p=JSON.parse(localStorage.getItem('dryerBg'));if(p&&p.c)bgCur=p}catch(e){}
-  $('bgSwatches').innerHTML=BGP.map(b=>
-    '<span class="bgsw" style="background:'+b.c+'" title="'+b.n+
-    '" onclick="bgApply(\''+b.c+'\',bgCur.lines)"></span>').join('');
-  $('bgLines').checked=bgCur.lines;$('bgColor').value=bgCur.c;
-  bgApply(bgCur.c,bgCur.lines)}
+  try{localStorage.removeItem('dryerBg')}catch(e){}          // pre-v2.0.23 dark default
+  try{var p=JSON.parse(localStorage.getItem('dryerTheme'));if(p&&p.t)bgCur=p}catch(e){}
+  $('bgSwatches').innerHTML=BGP.map(function(b){return '<span class="bgsw" data-t="'+b.t+
+    '" style="background:'+b.s+'" title="'+b.n+'" onclick="bgTheme(\''+b.t+'\')"></span>'}).join('');
+  $('bgLines').checked=bgCur.lines;$('bgColor').value=bgCur.c;bgPaint()}
 
 // ---------- manual heat knob (override for 60 s, then auto again) --------
 var knobTmr=0;
@@ -2072,12 +2144,12 @@ function setClockManual(){const v=$('f_dt').value;if(!v){toast('Pick a date & ti
     .then(()=>toast('Clock set')).catch(()=>toast('Offline',1))}
 
 // ---------- chart engine (dual axis, toggles, hover tooltip) -------------
-const SER={temp:{c:'#e3b341',lab:'Temp \u00B0C',ax:0,get:p=>p.t},
+const SER={temp:{c:'#f2c14e',lab:'Temp \u00B0C',ax:0,get:p=>p.t},
            hum:{c:'#4cc3ff',lab:'RH %',ax:0,get:p=>p.h},
-           heat:{c:'#f6d365',lab:'Heater %',ax:1,get:p=>p.heat},
-           fan:{c:'#5f8bff',lab:'Fans %',ax:1,get:p=>p.fan},
-           bat:{c:'#aab6c8',lab:'Battery %',ax:1,get:p=>p.bat},
-           wt:{c:'#e8ecf4',lab:'Weight g',ax:1,get:p=>p.wt}};
+           heat:{c:'#ff9a76',lab:'Heater %',ax:1,get:p=>p.heat},
+           fan:{c:'#c4b5fd',lab:'Fans %',ax:1,get:p=>p.fan},
+           bat:{c:'#6ee7b7',lab:'Battery %',ax:1,get:p=>p.bat},
+           wt:{c:'#f5f7ff',lab:'Weight g',ax:1,get:p=>p.wt}};
 const VIS={temp:true,hum:true,heat:false,fan:false,bat:false};
 const CIRC=2*Math.PI*52;
 function setRing(id,frac){const e=$(id);if(!e)return;frac=frac<0?0:frac>1?1:frac;
@@ -2099,7 +2171,7 @@ function paint(cnv,data,vis,xsec){
   // scales
   let a0min=1e9,a0max=-1e9;const a1min=0,a1max=100;
   const act=Object.keys(SER).filter(k=>vis[k]&&data.some(p=>SER[k].get(p)!=null&&!isNaN(SER[k].get(p))));
-  if(!act.length){g.fillStyle='#7c8aa3';g.font='12px system-ui';
+  if(!act.length){g.fillStyle='#cdd6f2';g.font='12px system-ui';
     g.fillText('waiting for data\u2026',PL,PT+14);return}
   for(const k of act)for(const p of data){const v=SER[k].get(p);
     if(v!=null&&!isNaN(v)){if(v<a0min)a0min=v;if(v>a0max)a0max=v}}
@@ -2112,22 +2184,22 @@ function paint(cnv,data,vis,xsec){
   const Y0=v=>PT+IH-(v-a0min)/(a0max-a0min)*IH;
   const Y1=v=>PT+IH-(v-a1min)/(a1max-a1min)*IH;
   // grid + axis labels
-  g.font='10.5px system-ui';g.strokeStyle='#16223c';g.lineWidth=1;
+  g.font='10.5px system-ui';g.strokeStyle='rgba(255,255,255,.13)';g.lineWidth=1;
   for(let i=0;i<=4;i++){const y=PT+IH*i/4;
     g.beginPath();g.moveTo(PL,y);g.lineTo(W-PR,y);g.stroke();
-    g.fillStyle='#7c8aa3';g.textAlign='right';
+    g.fillStyle='#cdd6f2';g.textAlign='right';
     g.fillText((a0max-(a0max-a0min)*i/4).toFixed(0),PL-6,y+3.5);
     g.textAlign='left';
     g.fillText((a1max-(a1max-a1min)*i/4).toFixed(0),W-PR+6,y+3.5)}
   // x labels (elapsed)
-  g.textAlign='center';g.fillStyle='#7c8aa3';
+  g.textAlign='center';g.fillStyle='#cdd6f2';
   const lastSec=xsec?data[n-1].sec:(data[n-1].ts-data[0].ts)/1000;
   for(let i=0;i<=4;i++){const idx=Math.round((n-1)*i/4);
     const sec=xsec?data[idx].sec:(data[idx].ts-data[0].ts)/1000;
     g.fillText(mmss(sec),X(idx),H-8)}
   // target temp guide on axis0 (live chart only)
   if(S&&!xsec&&VIS.temp){const y=Y0(S.set.setTemp);
-    if(y>PT&&y<PT+IH){g.setLineDash([5,5]);g.strokeStyle='#d4af37';g.lineWidth=1.2;
+    if(y>PT&&y<PT+IH){g.setLineDash([5,5]);g.strokeStyle='#f6dd9c';g.lineWidth=1.2;
       g.beginPath();g.moveTo(PL,y);g.lineTo(W-PR,y);g.stroke();g.setLineDash([])}}
   // series (linears + soft fill for axis0 series)
   for(const k of act){const s=SER[k],Y=s.ax?Y1:Y0;
@@ -2144,7 +2216,7 @@ function paint(cnv,data,vis,xsec){
       gr.addColorStop(0,s.c+'26');gr.addColorStop(1,s.c+'00');g.fillStyle=gr;g.fill()}
     if(last){g.fillStyle=s.c;g.beginPath();
       g.arc(last.x,last.y,3.2,0,7);g.fill();
-      g.fillStyle='#070b14';g.strokeStyle=s.c;g.lineWidth=1.4;
+      g.fillStyle='#173a98';g.strokeStyle=s.c;g.lineWidth=1.4;
       g.beginPath();g.arc(last.x,last.y,5.4,0,7);g.stroke()}}
 }
 let hoverI=-1;
@@ -2164,7 +2236,7 @@ function showTip(i){const tip=$('chartTip'),cnv=$('chart');
   tip.style.left=Math.min(W-150,Math.max(4,x+14))+'px';
   tip.style.top=(cnv.offsetTop+18)+'px';
   const g=cnv.getContext('2d');g.save();
-  g.strokeStyle='#33415e';g.setLineDash([4,4]);
+  g.strokeStyle='rgba(255,255,255,.35)';g.setLineDash([4,4]);
   g.beginPath();g.moveTo(x,12);g.lineTo(x,226);g.stroke();g.restore()}
 function chartHover(ev){const cnv=$('chart'),W=cnv.clientWidth,PL=42,PR=40;
   if(T.length<2)return;
@@ -2358,7 +2430,7 @@ function render(){
   setRing('g_h',S.hAvg!=null&&!isNaN(S.hAvg)?S.hAvg/100:0);
   setRing('g_b',S.bat.valid?S.bat.pct/100:0);
   const gb=$('g_b');if(S.bat.valid)
-    gb.setAttribute('stroke',S.bat.pct>50?'#5fa8ff':S.bat.pct>20?'#d4af37':'#f87171');
+    gb.setAttribute('stroke',S.bat.pct>50?'#6ee7b7':S.bat.pct>20?'#f2c14e':'#ff7b7b');
   setMark('g_tmark',S.set?((S.set.setTemp-15)/60):0,S.set&&S.set.setTemp>15&&S.set.setTemp<75);
   setMark('g_hlo',S.set?S.set.humLow/100:0,true);setMark('g_hhi',S.set?S.set.humHigh/100:0,true);
   $('t1').textContent=f2(S.s1.t);$('t2').textContent=f2(S.s2.t);
@@ -2545,9 +2617,9 @@ static const char ONLINE_LOADER_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Smart Dehumidifier - online interface</title>
-<style>body{margin:0;background:#101512;color:#e8f0ea;font:15px system-ui;
+<style>body{margin:0;background:#1b45b5 linear-gradient(180deg,#2352c9,#1d48b8 55%,#c4914a 72%,#8a5a14);color:#fff8ea;font:15px system-ui;
 height:100vh;display:flex;align-items:center;justify-content:center;text-align:center}
-#m{opacity:.75;padding:20px}a{color:#38bdf8}iframe{border:0;width:100vw;height:100vh}</style>
+#m{opacity:.9;padding:20px}a{color:#f6dd9c}iframe{border:0;width:100vw;height:100vh}</style>
 </head><body>
 <div id="m">loading the online interface&hellip;<br><br>
 If nothing appears your phone has no internet -<br>
@@ -2581,50 +2653,59 @@ static const char DISPLAY_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SMART DEHUMIDIFIER - display</title>
 <style>
-:root{--navy:#0b1026;--navy2:#141b3d;--card:#10173a;--gold:#f4c25e;
---blue:#4e9ff4;--green:#3ddc84;--red:#ff5f6b;--dim:#8b93b8;--white:#eef2ff}
+:root{--navy:#10307f;--navy2:rgba(12,34,104,.74);--card:rgba(19,48,142,.86);--gold:#f6d77e;
+--blue:#a8cbff;--green:#5ee89a;--red:#ff8a8a;--dim:#cdd6f2;--white:#fff8ea;
+--edge:rgba(233,196,106,.34);
+/* v2.0.23: royal-blue sky + golden-brown horizon (same as the dashboard) */
+--bgimg:radial-gradient(110% 40% at 50% 74%,rgba(247,201,111,.34),rgba(247,201,111,0) 70%),
+ linear-gradient(180deg,#2352c9 0%,#1d48b8 36%,#3560c8 55%,#c4914a 68%,#a8741d 80%,#8a5a14 100%)}
 *{box-sizing:border-box}html,body{height:100%}
-body{margin:0;background:var(--navy);color:var(--white);
+html{background:#1b45b5}
+body{margin:0;background:var(--bgimg);color:var(--white);
 font-family:'Segoe UI',system-ui,Arial,sans-serif;display:flex;
 flex-direction:column;padding:12px;overflow:hidden}
 .bar{display:flex;justify-content:space-between;align-items:center;
-background:var(--navy2);border-radius:12px;padding:10px 18px;font-size:2.6vmin}
+background:var(--navy2);border:1px solid var(--edge);border-radius:12px;padding:10px 18px;font-size:2.6vmin;
+box-shadow:0 6px 18px rgba(6,16,58,.3)}
 .bar b{color:var(--gold)}#sup{margin-left:12px}#sup.bad{color:var(--red)}
 #sup.ok{color:var(--green)}#pmd{color:var(--dim)}
 #stateRow{display:flex;align-items:baseline;gap:3vmin;padding:2vmin 2vmin 1vmin}
-#st{font-size:9vmin;font-weight:800;letter-spacing:1px}
+#st{font-size:9vmin;font-weight:800;letter-spacing:1px;text-shadow:0 2px 12px rgba(6,16,58,.5)}
 #st.DRYING{color:var(--green)}#st.FAULT{color:var(--red)}
 #st.DONE,#st.PURGING{color:var(--blue)}#st.IDLE{color:var(--dim)}
-#times{font-size:3.4vmin;color:var(--white)}
+#times{font-size:3.4vmin;color:var(--white);text-shadow:0 1px 6px rgba(6,16,58,.55)}
 #grid{flex:1;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;
 grid-template-rows:1fr 1fr;gap:12px;min-height:0}
-.tile{background:var(--card);border-radius:14px;padding:2vmin 2.4vmin;
+.tile{background:linear-gradient(180deg,rgba(30,64,170,.9),var(--card));border:1px solid var(--edge);
+border-radius:14px;padding:2vmin 2.4vmin;box-shadow:0 8px 22px rgba(6,16,58,.35);
 display:flex;flex-direction:column;justify-content:center;min-height:0}
 .tile .lbl{font-size:2.2vmin;color:var(--dim);letter-spacing:1px}
 .tile .val{font-size:6.4vmin;font-weight:700;color:var(--gold);line-height:1.1}
 .tile .sub{font-size:2.4vmin;color:var(--dim)}
-.hbar{height:2.2vmin;border-radius:6px;background:#0a0f24;margin-top:1.2vmin;
+.hbar{height:2.2vmin;border-radius:6px;background:rgba(6,18,64,.55);margin-top:1.2vmin;
 overflow:hidden}.hbar i{display:block;height:100%;border-radius:6px}
-#foot{font-size:2.6vmin;color:var(--dim);padding:1.4vmin 2vmin;text-align:center}
+#foot{font-size:2.6vmin;color:var(--dim);padding:1vmin 2vmin;margin-top:1.2vmin;text-align:center;
+background:var(--navy2);border:1px solid var(--edge);border-radius:10px}
 #fault{color:var(--red);font-weight:700;font-size:3vmin}
 #clk{cursor:pointer;white-space:nowrap;margin-right:2vmin}
 #clkPane{display:none;position:fixed;left:12px;right:12px;bottom:12px;
-background:var(--navy2);border-radius:12px;padding:14px;z-index:9;font-size:3vmin}
-#clkPane input{font-size:3vmin;padding:6px;border-radius:8px;border:1px solid #33407a;background:#0b1026;color:var(--white)}
+background:linear-gradient(180deg,#1d48b8,#10307f);border:1px solid var(--edge);
+border-radius:12px;padding:14px;z-index:9;font-size:3vmin}
+#clkPane input{font-size:3vmin;padding:6px;border-radius:8px;border:1px solid var(--edge);background:rgba(8,24,80,.7);color:var(--white)}
 #clkPane button{font-size:3vmin;padding:8px 14px;margin:8px 6px 0 0;border:0;
-border-radius:8px;background:var(--blue);color:#fff;cursor:pointer}
+border-radius:8px;background:linear-gradient(135deg,#f6dd9c,#b8862b);color:#2b1a02;font-weight:700;cursor:pointer}
 /* v2.0.19: virtual keypad - landscape text page + 4x4 pad */
 #vpWrap{display:none;flex:1;gap:12px;min-height:0}
 body.vp #stateRow,body.vp #grid,body.vp #foot{display:none}
 body.vp #vpWrap{display:flex}
-#vpText{flex:1;background:var(--card);border-radius:14px;padding:2vmin 3vmin;
+#vpText{flex:1;background:var(--card);border:1px solid var(--edge);border-radius:14px;padding:2vmin 3vmin;
 overflow:auto;font-size:3.2vmin;line-height:1.9;min-height:0}
 #vpText .sel{color:var(--gold);font-weight:800}
 #vpPad{width:min(46vmin,340px);display:grid;grid-template-columns:repeat(4,1fr);
 grid-auto-rows:1fr;gap:1.2vmin}
-#vpPad button{font-size:4.4vmin;font-weight:700;border-radius:12px;border:0;
+#vpPad button{font-size:4.4vmin;font-weight:700;border-radius:12px;border:1px solid var(--edge);
 background:var(--navy2);color:var(--white);cursor:pointer;font-family:inherit}
-#vpPad button:active{transform:scale(.93);background:var(--card)}
+#vpPad button:active{transform:scale(.93);background:rgba(233,196,106,.3)}
 #vpPad button small{display:block;font-size:1.9vmin;font-weight:600;color:var(--dim)}
 @media(max-width:720px){#vpWrap{flex-direction:column}#vpPad{width:100%}}
 </style></head><body>
@@ -2673,7 +2754,7 @@ z-index:8;text-align:center">
 <input type="datetime-local" id="kdt">
 <button onclick="kSet()">Set</button>
 <button onclick="kDev()">Use this device</button>
-<button onclick="clkPane()" style="background:#4a5568">Close</button>
+<button onclick="clkPane()" style="background:rgba(8,24,80,.7);color:#fff8ea;border:1px solid rgba(233,196,106,.45)">Close</button>
 <div class="sml" style="color:var(--dim);margin-top:6px">full control: 192.168.4.1 &middot; keypad: menu 6/7 &middot; auto: open / on a phone</div></div>
 <script>
 var wake=null;
@@ -3289,6 +3370,31 @@ static bool wr(uint16_t a, const uint8_t *b, uint16_t n) {
   return true;
 }
 
+// ---- v2.0.23: is it REALLY 32 kB? ----------------------------------------
+// DS1307 "Tiny RTC" boards carry an AT24C32 (4 kB, 32-byte pages) at the
+// same 0x50. Taken for an AT24C256 it would wrap addresses and page writes
+// and corrupt its own header. A smaller 24Cxx mirrors high addresses onto
+// low ones: write a marker to a spare byte above the last record (0x7FF0 -
+// never used by the layout) and see whether it shows up at the 4/8/16 kB
+// alias. The original byte is put back either way.
+static bool isFull32k() {
+  const uint16_t HI = 0x7FF0;
+  const uint16_t LO[3] = {0x0FF0, 0x1FF0, 0x3FF0};  // aliases on 4/8/16 kB
+  uint8_t hi0, lo0[3];
+  if (!rd(HI, &hi0, 1)) return false;
+  for (uint8_t i = 0; i < 3; i++) if (!rd(LO[i], &lo0[i], 1)) return false;
+  uint8_t m = 0x5A;                             // marker unlike every byte now
+  while (m == hi0 || m == lo0[0] || m == lo0[1] || m == lo0[2]) m++;
+  if (!wr(HI, &m, 1)) return false;
+  bool aliased = false;
+  for (uint8_t i = 0; i < 3; i++) {
+    uint8_t v = 0;
+    if (!rd(LO[i], &v, 1) || v == m) aliased = true;
+  }
+  wr(HI, &hi0, 1);                              // give the byte back
+  return !aliased;
+}
+
 // ---- record pack/unpack (explicit, endian/padding-safe) ----------------
 static uint8_t crc8(const uint8_t *b, uint16_t n) {
   uint8_t c = 0x5A;
@@ -3340,6 +3446,11 @@ void begin() {
   Wire.beginTransmission(ELOG_ADDR);
   if (Wire.endTransmission() != 0) {
     Serial.println(F("[eelog] AT24C256 not found - long-term registry off"));
+    return;
+  }
+  if (!isFull32k()) {
+    Serial.println(F("[eelog] the EEPROM at 0x50 is smaller than 32 kB (the AT24C32 on a "
+                     "DS1307 board?) - long-term registry off; fit an AT24C256"));
     return;
   }
   uint8_t b[16];
@@ -3413,12 +3524,17 @@ void clear() {
 /* ==========================  src/rtc.cpp  ========================== */
 /**
  * @file rtc.cpp
- * @brief DS1302 real-time clock driver - 3-wire bit-bang, library-free.
- * See rtc.h for wiring + behaviour. Pins come from the variant config
- * (S3: RST 40 / SCLK 42 / I-O 47; classic: -1 = not fitted).
+ * @brief DS1307 real-time clock driver - I2C, library-free (Wire only).
+ * See rtc.h for wiring + behaviour. Uses the I2C0 bus (Wire) that
+ * sensors.begin() starts: S3 SDA 8 / SCL 9, classic SDA 21 / SCL 22.
  */
 
 #if RTC_ENABLED
+#include <Wire.h>
+
+#ifndef RTC_I2C_ADDR
+#define RTC_I2C_ADDR 0x68     // DS1307 / DS3231 - fixed address
+#endif
 
 namespace rtc {
 
@@ -3437,8 +3553,8 @@ static time_t civilToEpoch(int y, int mo, int d, int h, int mi, int s) {
   return daysSinceEpoch(y, mo, d) * 86400L + h * 3600L + mi * 60L + s;
 }
 
-// DS1302 day-of-week register value for a civil date: 1 = Sunday .. 7.
-// 1970-01-01 was a Thursday (=5), hence the +4.
+// Day-of-week register value for a civil date: 1 = Sunday .. 7 (the DS1307
+// only needs the values to be sequential). 1970-01-01 was a Thursday (=5).
 static uint8_t dowFromCivil(int y, int mo, int d) {
   long days = daysSinceEpoch(y, mo, d);
   return (uint8_t)(((days % 7) + 7 + 4) % 7 + 1);
@@ -3464,68 +3580,59 @@ static void epochToCivil(time_t ep, int *y, int *mo, int *d,
 
 static uint8_t bcd2bin(uint8_t v) { return (uint8_t)((v >> 4) * 10 + (v & 0x0F)); }
 static uint8_t bin2bcd(uint8_t v) { return (uint8_t)(((v / 10) << 4) | (v % 10)); }
+static bool bcdOk(uint8_t v) { return (v & 0x0F) <= 9 && (v >> 4) <= 9; }
 
-// ---- DS1302 bit-bang ------------------------------------------------------
-// Frame: RST low -> high (chip select), START bit 0, 8-bit command byte
-// LSB-first, data bytes (in read mode the chip drives I/O, updating on
-// each SCLK falling edge), STOP bit 1, RST low.
-// Command byte: bit7=1, bit6=0 (clock data), bits5-1 = register,
-// bit0 = R/W (0 write / 1 read). Time: 0x80 write / 0x81 read; control
-// register: 0x8E write / 0x8F read; scratch RAM byte 0: 0xC0 (write) /
-// 0xC1 (read); registers auto-increment in burst.
-// Time registers 0-6 BCD: sec min hr dow date month year. CH (halt)
-// flag = bit7 of the SECONDS register; WP (write-protect) = bit7 of the
-// control register, power-on state UNDEFINED - always cleared before a
-// write (datasheet requirement).
+// ---- DS1307 registers (all BCD) -------------------------------------------
+// 0x00 seconds  bit7 = CH (clock halt: 1 = oscillator stopped)
+// 0x01 minutes
+// 0x02 hours    bit6 = 12/24 select (1 = 12 h mode)
+//               12 h: bit5 = PM, bits4-0 = 1..12 · 24 h: bits5-0 = 0..23
+// 0x03 day of week 1..7 · 0x04 date 1..31 · 0x05 month 1..12 · 0x06 year 00..99
+// 0x07 control (SQW/OUT) · 0x08-0x3F 56 bytes battery-backed RAM (untouched)
+// A burst read from 0x00 returns one consistent snapshot: the chip copies
+// its counters into a secondary buffer on the I2C START.
+// (DS3231: same 0x00-0x06 layout; seconds bit7 always 0, month bit7 =
+//  century flag - masked below.)
 
-static inline void ceHiLo(bool hi) { digitalWrite(PIN_RTC_RST, hi ? HIGH : LOW); }
-static inline void clkHiLo(bool hi) { digitalWrite(PIN_RTC_SCLK, hi ? HIGH : LOW); }
-
-static void rtcBitWrite(bool b) {
-  digitalWrite(PIN_RTC_IO, b ? HIGH : LOW);
-  clkHiLo(true);
-  clkHiLo(false);
+static bool readRegs(uint8_t *t) {             // the 7 time registers
+  Wire.beginTransmission(RTC_I2C_ADDR);
+  Wire.write((uint8_t)0x00);                     // register pointer
+  if (Wire.endTransmission(false) != 0) return false;        // repeated START
+  if (Wire.requestFrom((int)RTC_I2C_ADDR, 7) != 7) return false;
+  for (uint8_t i = 0; i < 7; i++) t[i] = (uint8_t)Wire.read();
+  return true;
 }
 
-static bool rtcBitRead() {
-  clkHiLo(true);
-  clkHiLo(false);                              // falling edge: chip updates
-  return (digitalRead(PIN_RTC_IO) == HIGH);    // bit, valid during the low
-}                                              // phase until the next fall
-
-static void byteWrite(uint8_t v) {
-  pinMode(PIN_RTC_IO, OUTPUT);
-  for (int i = 0; i < 8; i++) rtcBitWrite((v >> i) & 1);
+static bool writeRegs(const uint8_t *t) {
+  Wire.beginTransmission(RTC_I2C_ADDR);
+  Wire.write((uint8_t)0x00);
+  for (uint8_t i = 0; i < 7; i++) Wire.write(t[i]);
+  return Wire.endTransmission() == 0;
 }
 
-static uint8_t byteRead() {
-  pinMode(PIN_RTC_IO, INPUT);
-  uint8_t v = 0;
-  for (int i = 0; i < 8; i++) if (rtcBitRead()) v |= (uint8_t)(1u << i);
-  return v;
-}
-
-static void xfer(uint8_t addr, const uint8_t *data, uint8_t n, uint8_t *out) {
-  ceHiLo(false);
-  ceHiLo(true);                                   // chip select (CE = RST)
-  rtcBitWrite(false);                                // START
-  byteWrite(addr);
-  if (addr & 0x01) {                              // R/W bit (bit0): 1 = read
-    for (uint8_t i = 0; i < n; i++) out[i] = byteRead();
-  } else {
-    for (uint8_t i = 0; i < n; i++) byteWrite(data[i]);
+// hours register -> 0..23. In 24 h mode bit5 is the "20s" digit: masking
+// with 0x1F (as the old DS1302 driver did) turns 20:00-23:59 into 00-03.
+static int hour24(uint8_t hr) {
+  if (hr & 0x40) {                               // 12-hour mode
+    int h = bcd2bin(hr & 0x1F);                  // 1..12
+    if (hr & 0x20) return (h == 12) ? 12 : h + 12;   // PM
+    return (h == 12) ? 0 : h;                          // AM (12 AM = 00)
   }
-  rtcBitWrite(true);                                 // STOP
-  ceHiLo(false);
+  return bcd2bin(hr & 0x3F);                     // 24-hour mode
 }
 
 // sane = a time a real module would hold (year 2019-2099 keeps this
 // forgiving for modules that arrive with a seller-set date)
 static bool sane(const uint8_t *t) {
-  return bcd2bin(t[0]) < 60 && bcd2bin(t[1]) < 60
-      && bcd2bin(t[2] & 0x1F) <= 23                      // bits7-5 = mode/PM
+  uint8_t sec = t[0] & 0x7F, min = t[1] & 0x7F, mon = t[5] & 0x1F;
+  uint8_t hr = (t[2] & 0x40) ? (t[2] & 0x1F) : (t[2] & 0x3F);
+  if (!bcdOk(sec) || !bcdOk(min) || !bcdOk(hr) || !bcdOk(t[4]) ||
+      !bcdOk(mon) || !bcdOk(t[6])) return false;
+  bool hourOk = (t[2] & 0x40) ? (bcd2bin(hr) >= 1 && bcd2bin(hr) <= 12)
+                              : (bcd2bin(hr) <= 23);
+  return bcd2bin(sec) < 60 && bcd2bin(min) < 60 && hourOk
       && bcd2bin(t[4]) >= 1 && bcd2bin(t[4]) <= 31
-      && bcd2bin(t[5]) >= 1 && bcd2bin(t[5]) <= 12
+      && bcd2bin(mon) >= 1 && bcd2bin(mon) <= 12
       && bcd2bin(t[6]) >= 19 && bcd2bin(t[6]) <= 99;
 }
 
@@ -3535,33 +3642,15 @@ static bool sTrusted = false;
 bool begin() {
   sPresent = false;
   sTrusted = false;
-  if (PIN_RTC_RST < 0 || PIN_RTC_SCLK < 0 || PIN_RTC_IO < 0) return false;
-  pinMode(PIN_RTC_RST, OUTPUT);  ceHiLo(false);
-  pinMode(PIN_RTC_SCLK, OUTPUT); clkHiLo(false);
-  pinMode(PIN_RTC_IO, OUTPUT);   digitalWrite(PIN_RTC_IO, LOW);
-
-  {
-    uint8_t zero = 0x00;
-    xfer(0x8E, &zero, 1, nullptr);               // clear WP (power-on state
-  }                                              // is undefined per datasheet)
-  // Deterministic presence probe on scratch RAM byte 0: read it, write a
-  // magic value, read it back, restore it. A dangling bus echoes nothing,
-  // so only a real chip can return the magic.
-  uint8_t orig = 0, magic = 0xA5, back = 0;
-  xfer(0xC1, nullptr, 1, &orig);
-  xfer(0xC0, &magic, 1, nullptr);
-  xfer(0xC1, nullptr, 1, &back);
-  xfer(0xC0, &orig, 1, nullptr);                 // give the byte back
-  sPresent = (back == magic);
-  if (!sPresent) return false;
-  {
-    uint8_t a[7];
-    xfer(0x81, nullptr, 7, a);
-    // CH flag (bit7 of seconds) set = clock halted: factory-fresh modules
-    // ship this way with garbage registers, so the time is untrusted until
-    // the first real set (site sync or 'rtcset').
-    sTrusted = sane(a) && !(a[0] & 0x80);
-  }
+  Wire.beginTransmission(RTC_I2C_ADDR);
+  if (Wire.endTransmission() != 0) return false;     // nobody at 0x68
+  uint8_t t[7];
+  if (!readRegs(t)) return false;
+  sPresent = true;
+  // CH set = oscillator halted: factory-fresh modules (and dead coin cells)
+  // come up this way, often with junk registers - untrusted until the first
+  // real set (site sync, keypad menu or 'rtcset').
+  sTrusted = !(t[0] & 0x80) && sane(t);
   return true;
 }
 
@@ -3570,20 +3659,10 @@ bool present() { return sPresent; }
 bool readTime(time_t *outEp) {
   if (!sPresent) return false;
   uint8_t t[7];
-  xfer(0x81, nullptr, 7, t);
-  if (!sane(t)) return false;
-  int year = 2000 + bcd2bin(t[6]);
-  // Hours register: bit7 = 12 h mode select, bit5 = AM/PM (12 h mode),
-  // bits4-0 = hour BCD (0-23 in 24 h mode, 1-12 in 12 h mode).
-  int hour;
-  if (t[2] & 0x80) {                              // 12-hour mode
-    hour = bcd2bin(t[2] & 0x1F);                  // 1-12
-    if (t[2] & 0x20) hour = (hour == 12) ? 12 : hour + 12;   // PM
-    else            hour = (hour == 12) ? 0  : hour;         // AM
-  } else                                          // 24-hour mode
-    hour = bcd2bin(t[2] & 0x1F);
-  time_t ep = civilToEpoch(year, bcd2bin(t[5]), bcd2bin(t[4]),
-                           hour, bcd2bin(t[1]), bcd2bin(t[0]));
+  if (!readRegs(t) || (t[0] & 0x80) || !sane(t)) return false;  // halted/junk
+  time_t ep = civilToEpoch(2000 + bcd2bin(t[6]), bcd2bin(t[5] & 0x1F),
+                           bcd2bin(t[4]), hour24(t[2]),
+                           bcd2bin(t[1] & 0x7F), bcd2bin(t[0] & 0x7F));
   ep -= (time_t)cfg.tzMinutes * 60;              // chip holds LOCAL time
   *outEp = ep;
   return true;
@@ -3595,42 +3674,39 @@ void writeNow() {
   if (ep <= (time_t)1700000000) return;          // don't push an unset clock
   int y, mo, d, h, mi, s;
   epochToCivil(ep + (time_t)cfg.tzMinutes * 60, &y, &mo, &d, &h, &mi, &s);
-  uint8_t dow = dowFromCivil(y, mo, d);    // from the LOCAL civil date
   uint8_t t[7] = {
-    bin2bcd((uint8_t)s), bin2bcd((uint8_t)mi),
-    bin2bcd((uint8_t)(h & 0x1F)),        // 24 h (bit5 = 12-h flag = 0)
-    bin2bcd(dow), bin2bcd((uint8_t)d), bin2bcd((uint8_t)mo),
+    bin2bcd((uint8_t)s),                 // bit7 CH = 0 -> oscillator runs
+    bin2bcd((uint8_t)mi),
+    bin2bcd((uint8_t)h),                 // bit6 = 0 -> 24-hour mode
+    dowFromCivil(y, mo, d),              // 1..7 (from the LOCAL civil date)
+    bin2bcd((uint8_t)d), bin2bcd((uint8_t)mo),
     bin2bcd((uint8_t)((y >= 2000 ? y - 2000 : y) % 100)),
   };
-  {
-    uint8_t zero = 0x00;
-    xfer(0x8E, &zero, 1, nullptr);               // clear WP before the write
-    xfer(0x80, t, 7, nullptr);                   // burst; seconds bit7=0
-  }                                              // clears CH: now ticking
-  sTrusted = true;
+  if (writeRegs(t)) sTrusted = true;
 }
 
 const char *statusText() {
-  static char b[64];
+  static char b[80];
   if (!sPresent)
-    snprintf(b, sizeof(b), "no DS1302 (clock = phone sync + NVS)");
+    snprintf(b, sizeof(b), "no DS1307 at 0x%02X (SDA %d / SCL %d, VCC 5 V) - clock = phone sync + NVS",
+             (unsigned)RTC_I2C_ADDR, (int)PIN_I2C0_SDA, (int)PIN_I2C0_SCL);
   else if (sTrusted) {
     time_t ep;
     if (readTime(&ep)) {
       time_t local = ep + (time_t)cfg.tzMinutes * 60;
       int y, mo, d, h, mi, s;
       epochToCivil(local, &y, &mo, &d, &h, &mi, &s);
-      snprintf(b, sizeof(b), "DS1302 OK %04d-%02d-%02d %02d:%02d:%02d (coin-cell)",
+      snprintf(b, sizeof(b), "DS1307 OK %04d-%02d-%02d %02d:%02d:%02d (coin-cell)",
                y, mo, d, h, mi, s);
-    } else snprintf(b, sizeof(b), "DS1302 OK but registers read garbage");
+    } else snprintf(b, sizeof(b), "DS1307 found but its registers read garbage");
   } else
-    snprintf(b, sizeof(b), "DS1302 present, no valid time yet (open site or 'rtcset')");
+    snprintf(b, sizeof(b), "DS1307 found, clock not set yet (open the site or type 'rtcset')");
   return b;
 }
 
 }  // namespace rtc
 
-#else   // !RTC_ENABLED - no DS1302 on this build (classic variant)
+#else   // !RTC_ENABLED - no RTC on this build
 
 // Same API as no-ops - the contract rtc.h documents - so callers such as
 // the serial console's `rtc` / `rtcset` commands need no #if of their own
@@ -3640,7 +3716,7 @@ bool begin() { return false; }
 bool present() { return false; }
 bool readTime(time_t *outEp) { (void)outEp; return false; }
 void writeNow() {}
-const char *statusText() { return "no DS1302 on this build (clock = phone sync + NVS)"; }
+const char *statusText() { return "no RTC on this build (RTC_ENABLED 0 - clock = phone sync + NVS)"; }
 }  // namespace rtc
 
 #endif  // RTC_ENABLED
@@ -6156,8 +6232,8 @@ static void clockSave(uint32_t ep) {
   p.end();
 }
 
-// v2.0.21: mirror a real time set into the DS1302 (no-op when absent /
-// classic). The chip then holds the clock across a full power-down.
+// mirror a real time set into the DS1307 (no-op when absent). The chip
+// then holds the clock across a full power-down.
 static void clockToRtc() {
 #if RTC_ENABLED
   rtc::writeNow();
@@ -7001,9 +7077,13 @@ static bool pinUsed(int p) {
     PIN_LOAD_RELAY, PIN_BYPASS_CTRL, PIN_SUPPLY_CH1, PIN_SUPPLY_CH2,
     PIN_SOLAR_TOGGLE, PIN_SUPPLY_OPTO,
     PIN_BTN1, PIN_BTN2, PIN_POWER_HOLD, PIN_BUZZER, PIN_PIXEL,
+#if DISPLAY_ENABLED          // v2.0.23: a compiled-out module owns no pads,
     PIN_TFT_SCK, PIN_TFT_MOSI, PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RST,
+#endif                       // so its spare pins get parked like the rest
     PIN_SCALE_CLK, PIN_SCALE_DOUT, PIN_DOOR_LOCK, PIN_DOOR_REED,
+#if TXDISP_ENABLED           // (S3: 3 + 40/42/47 were left floating)
     PIN_TXDISP_TX,
+#endif
     PIN_DHT22_CHAMBER, PIN_DHT11_OUT,
 #ifdef PIN_BTN
     PIN_BTN,
@@ -7030,6 +7110,7 @@ static void pinsUnusedSafe() {
     pinMode(p, INPUT_PULLDOWN); parked++;                   // v2.0.18: DISABLED
 #else
     if (p == 1 || p == 3) continue;                         // UART0 = console
+    if (p == 0) continue;                                   // boot strap
     if (p >= 6 && p <= 11) continue;                        // flash
     if (p == 20 || p == 24 || (p >= 28 && p <= 31)) continue; // not bonded
     if (p >= 34) { pinMode(p, INPUT); continue; }           // input-only pads
@@ -7388,7 +7469,8 @@ static void initSystem() {
                 PIN_SUPPLY_OPTO >= 0 ? "fitted" : "absent",
                 supply::latched() ? "latch ok" : "no latch (USB power?)");
 #if RTC_ENABLED
-  Serial.printf("[diag] %s\n", rtc::statusText());
+  rtc::begin();                    // detect the DS1307 (I2C0 @ 0x68) BEFORE
+  Serial.printf("[diag] %s\n", rtc::statusText());   // reporting it
 #endif
 
   // v2.0: INITIALISATION WINDOW - every output stays LOW, the splash
@@ -7418,12 +7500,12 @@ static void initSystem() {
   display::splash(false);         // hand over to the main screen
   Serial.println(F("[init] initialisation + calibration checks complete - starting"));
 
-  // 3c. DS1302 RTC (v2.0.21): coin-cell date & time that survives a
-  // FULL power-down. Runs BEFORE web::begin() so a good RTC time wins
-  // over the (stale) NVS restore - clockBoot() then sees a live clock
-  // and backs off. No chip / untrusted time = today's phone-sync clock.
+  // 3c. DS1307 RTC (v2.0.23; DS1302 in v2.0.21-22): coin-cell date & time
+  // that survives a FULL power-down. Detected in the self-test above;
+  // restored here, BEFORE web::begin(), so a good RTC time wins over the
+  // (stale) NVS restore - clockBoot() then sees a live clock and backs
+  // off. No chip / untrusted time = today's phone-sync clock.
 #if RTC_ENABLED
-  rtc::begin();
   {
     time_t rtcEp = 0;
     if (rtc::readTime(&rtcEp)) {
@@ -7600,7 +7682,7 @@ void loop() {
 
 #endif  // DRYER_RTOS
 /* ==== END OF FILE ====
- * total lines (wc -l): 7606   non-blank lines: 6979
+ * total lines (wc -l): 7688   non-blank lines: 7063
  * build 2026-09-25 - if these numbers differ from what you see,
  * you are looking at an older copy; regenerate: node tools/single-file/assemble.js
  */
