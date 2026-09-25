@@ -1,0 +1,214 @@
+============================================================================
+ SMART DEHUMIDIFIER PILLAR - FULL WIRE-BY-WIRE
+ ESP32-S3 + 2 x PCF8574 + HX711 WEIGH SCALE   (v2.1 build)
+ Pin numbers as compiled in firmware v2.0.20: DHT11 = GPIO41,
+ door reed = GPIO21 (this header does NOT break out GPIO 22-34).
+============================================================================
+ Every wire in the system, listed FROM -> TO. Print it, tick as you wire.
+ Rules that never bend:
+   - HX711 and the heater/fan/battery pins go DIRECT to the S3
+     (microsecond timing / PWM / analog - expanders cannot do them)
+   - everything slow (keypad, relays, buzzer, buttons, toggle, opto,
+     door switch) goes through the PCF8574s on the I2C bus
+   - buy PCF8574, NEVER PCF8574A (the A answers at 0x38 = AHT10 clash)
+   - ALL GROUNDS COMMON AT ONE STAR POINT
+============================================================================
+
+
+----------------------------------------------------------------------------
+ A. POWER (wire these FIRST, buck set to 5.0 V BEFORE anything connects)
+----------------------------------------------------------------------------
+ solar panel + / -          -> MPPT PV+ / PV-
+ MPPT BAT+ / BAT-           -> LiFePO4 4S battery + / -   (BMS >= 50 A)
+ battery +                  -> 50 A fuse holder -> P-MOSFET latch SOURCE
+ P-MOSFET latch DRAIN       -> 12 V bus (+)
+ P-MOSFET gate              -> 100k to battery +  AND  BUTTON-1 (to GND)
+ S3 GPIO14                  -> P-MOSFET gate   (latch HOLD, 3.3 V ok)
+ 12 V bus (+)               -> BTS7960 B+      (LPWM pin -> GND at module)
+ 12 V bus (+)               -> L298N +12V      (remove the ENB jumper)
+ 12 V bus (+)               -> 5 V buck IN+
+ 5 V buck OUT+ (5.0 V!)     -> ESP32 5V/VIN, relay module VCC
+ 3V3 (from the S3 board)    -> PCF #1/#2 VCC, AHT10, DHT22, DHT11,
+                            AT24C256 EEPROM (cycle registry),
+                              buzzer +, optocoupler VCC, toggle-throw
+ supply relay COM1           -> chamber bus from battery/solar feed
+ supply relay NO1            -> chamber solar feed (BTS7960 side)
+ supply relay COM2 / NO2     -> same for the BYPASS supply feed
+ ALL MINUS TOGETHER          -> battery -, module GNDs, S3 GND: ONE star
+
+
+----------------------------------------------------------------------------
+ B. S3 DIRECT PINS (never through a PCF)
+----------------------------------------------------------------------------
+ S3 GPIO 1  -> HX711 . SCK (PD_SCK)          weigh scale clock
+ S3 GPIO 2  -> HX711 . DT  (DOUT)            weigh scale data
+ S3 GPIO 41 -> DHT11 . DATA  (outdoor sensor; +10k pull-up to 3V3;
+              DHT11 VCC -> 3V3, GND -> GND; mount in NORTH-SIDE shade.
+              v2.0.20 remap: this header does NOT break out GPIO33/34,
+              so the DHT11 runs on 41 - N8, N16 and N16R8 alike)
+ S3 GPIO 21 -> door LIMIT SWITCH (other leg to GND, closed = LOW,
+              internal pull-up; v2.0.20 remap from GPIO34 - not
+              broken out on this header)
+ S3 GPIO 48 -> on-board RGB status pixel (WS2812 DATA - the DevKitC-1
+              v1.0 on-board LED; NOTHING to wire! v1.1 boards: GPIO38)
+ S3 GPIO 18 -> supply optocoupler . OUT  (HIGH = feed live; GPIO35 is
+              PSRAM on R8 boards - never wire 35/36/37 on those)
+ S3 GPIO 4  -> battery divider midpoint      (100k from +, 15k to MOSFET)
+ S3 GPIO 5  -> 2N7000 gate (divider low side)
+ S3 GPIO 8  -> I2C0 SDA  (PCF #1 keypad + PCF #2 panel + AHT10 #1
+                          + AT24C256 EEPROM 0x50, v2.0.17)
+ S3 GPIO 9  -> I2C0 SCL
+ S3 GPIO 10 -> DHT22 . DATA  (chamber cool-return sensor = source #2;
+              +10k pull-up to 3V3, DHT22 VCC -> 3V3, GND -> GND)
+ S3 GPIO 11 -> spare  (I2C1 free - room for a future I2C part)
+ S3 GPIO 40 -> DS1302 . RST   (v2.0.21: date & time, coin cell)
+ S3 GPIO 42 -> DS1302 . SCLK
+ S3 GPIO 47 -> DS1302 . I/O
+ S3 GPIO 12 -> 555 shifter pin 4 -> 555 pin 3 -> BTS7960 RPWM
+ S3 GPIO 13 -> BTS7960 R_EN + L_EN (jumpered together)
+ S3 GPIO 14 -> P-MOSFET latch hold (see A)
+ S3 GPIO 17 -> L298N . ENB  (fan PWM - the ONLY L298N wire; REMOVE the
+              ENB jumper cap; add 10k ENB->GND so the fan stays off
+              during boot. Fixed direction ON THE MODULE:
+              IN3 -> 5V header, IN4 -> GND. In the current build 18 = opto,
+              21 = door)
+ (NO DISPLAY in this build - the website is the screen: "/" = full
+  control, "/display" = kiosk page. FREE now: 3, 11
+  (40/42/47 = DS1302 RTC, 41 = DHT11, 21 = door, 48 = on-board
+  pixel); when the front panel
+  moves to PCF #2 another 8 free up: 6, 7, 15, 16, 18, 21, 38, 39.)
+ AHT10 #1 . SDA/SCL -> GPIO 8 / GPIO 9      (chamber top)
+AT24C256  . SDA/SCL -> GPIO 8 / GPIO 9, A0/A1/A2 -> GND = 0x50
+             (32 kB cycle-registry EEPROM, v2.0.17 - auto-detected)
+ DHT22 . DATA        -> GPIO 10             (cool return, +10k)
+ DS1302 module (v2.0.21 - date & time that survive a FULL power-down):
+   VCC -> 3V3, GND -> GND, RST -> GPIO 40, SCLK -> GPIO 42, I/O ->
+   GPIO 47, BZ -> unused. The module's CR2032 stays ON the module.
+   No chip fitted? Nothing to do - the dryer runs on phone-sync + NVS.
+ S3 GPIO 0  = BOOT button on the board (start/stop; nothing to wire)
+ Strapping 45/46 stay unwired; 35/36/37 = PSRAM on octal (R8) boards
+
+
+----------------------------------------------------------------------------
+ C. HX711 WEIGH SCALE - FULL DETAIL (the weight system)
+----------------------------------------------------------------------------
+ MODULE PINS: VCC, GND, DT (DOUT), SCK (PD_SCK), E+, E-, A+, A-, B+, B-
+
+ HX711 VCC -> 3V3            (NOT 5V: DOUT must stay 3.3 V logic for S3)
+ HX711 GND -> GND
+ HX711 SCK -> S3 GPIO 1
+ HX711 DT  -> S3 GPIO 2
+ B+ / B-   -> unused (channel B not needed; leave open)
+
+ LOAD CELLS: 2 x 5 kg HALF-BRIDGE bars, 3 wires each:
+   RED   = excitation +      BLACK = excitation -     WHITE = signal
+
+   cell 1 RED   -> HX711 E+
+   cell 2 RED   -> HX711 E+
+   cell 1 BLACK -> HX711 E-
+   cell 2 BLACK -> HX711 E-
+   cell 1 WHITE -> HX711 A+      (the two half-bridges form one
+   cell 2 WHITE -> HX711 A-       full bridge, measured on channel A)
+ (on some cells the signal wire is GREEN instead of WHITE - same role)
+
+ MOUNTING (this decides whether grams are true):
+   - cells go UNDER the bottom-tray support, OUTSIDE the hot chamber
+   - one cell at each end of the tray rail: bolt ONE END of each bar to
+     the fixed frame, the OTHER END carries the tray rail (weight path
+     through the mounting holes, M5 bolts + rigid spacers, no flex in
+     the mounting, arrows on the bars point in the load direction)
+   - total (tray + sticks) must stay under 10 kg
+   - the HX711 BOARD itself lives in the cool control bay (rated 85 C)
+   - keep the cell wires away from the coil leads (twist them if noisy)
+
+ COMMISSION (on the website, or serial):
+   1. trays empty -> website tile TARE          (or: serial "tare")
+   2. put a known weight (e.g. 1000 g) on the tray
+   3. website tile Calibrate -> enter 1000      (or: serial "cal 1000")
+   4. done - grams now true; Parameters -> Dry to weight: ON (optional)
+   5. door close with load -> READY: n g shown (batch = diff vs tare)
+
+
+----------------------------------------------------------------------------
+ D. PCF8574 EXPANDERS (all on I2C0: SDA=GPIO8, SCL=GPIO9)
+----------------------------------------------------------------------------
+ EVERY PCF MODULE:
+   VCC -> 3V3      GND -> GND
+   SDA -> S3 GPIO 8 (bus)      SCL -> S3 GPIO 9 (bus)
+   INT -> not connected (polled)
+
+ PCF #1 @ 0x20 - KEYPAD (fitted today)
+   strap: A0->GND  A1->GND  A2->GND
+   P0 -> keypad ROW 1 (keys 1 2 3 A)
+   P1 -> keypad ROW 2 (keys 4 5 6 B)
+   P2 -> keypad ROW 3 (keys 7 8 9 C)
+   P3 -> keypad ROW 4 (keys * 0 # D)
+   P4 -> keypad COLUMN 1 (1 4 7 *)
+   P5 -> keypad COLUMN 2 (2 5 8 0)
+   P6 -> keypad COLUMN 3 (3 6 9 #)
+   P7 -> keypad COLUMN 4 (A B C D)
+   key map: 2/4/6/8 = arrows, A = OK, B = menu, C = mode, D = run,
+            digits type values, * = home, # = back
+
+ PCF #2 @ 0x21 - FRONT PANEL: MIXED outputs + inputs (v2.1)
+   strap: A0->3V3  A1->GND  A2->GND
+   MIXED PORT RULES (one chip, both directions - this is fine):
+     - every pin gets a 10k pull-up to 3V3: outputs get a solid HIGH
+       (PCF only ever SINKS current, 25 mA), inputs get a clean idle
+     - input pins are ALWAYS written 1; firmware reads the whole port
+       and masks the output bits
+     - the PCF powers up with ALL PINS HIGH -> everything below is
+       wired so HIGH = OFF/quiet = BOOT-SAFE
+
+   P0 -> 2-ch supply relay . IN1 (CH1 = solar feed)     [OUTPUT]
+   P1 -> 2-ch supply relay . IN2 (CH2 = bypass feed)    [OUTPUT]
+         use an ACTIVE-LOW relay module (the common BLUE board):
+         PCF LOW = relay ON, and the power-up HIGH = both relays OFF
+   P2 -> BUTTON-1  (other leg GND)   3 s = hard off, 10 s = reboot
+   P3 -> BUTTON-2  (other leg GND)   press = agarbatti preset + start
+   P4 -> SOLAR toggle . common       (solar throw -> 3V3, bypass -> GND)
+   P5 -> supply optocoupler . OUT    (HIGH = selected feed is live)
+   P6 -> door LIMIT SWITCH (other leg GND; closed = LOW)
+   P7 -> buzzer, wired LOW-SIDE: buzzer + -> 3V3, buzzer - -> P7
+         (PCF sinking P7 = beep; power-up HIGH = silent)   [OUTPUT]
+
+   relay module VCC -> 5 V buck, GND -> GND; contacts see section A
+   FREED S3 PINS: 6, 7 (relays) + 38 (buzzer) + 15, 16 (buttons) +
+   39 (toggle) + 18 (opto) + 21 (door switch) = 8 spare pins
+
+ NOTE: two PCFs + AHT10 #1 on one bus = keep only the backpack's 10k
+ bus pull-ups (fine at this count; add more only if the bus misbehaves).
+
+
+----------------------------------------------------------------------------
+ E. FRONT-PANEL ITEMS (quick list)
+----------------------------------------------------------------------------
+ BUTTON-1  -> PCF#2 P2 + GND          (master power)
+ BUTTON-2  -> PCF#2 P3 + GND          (default automation)
+ SOLAR toggle -> PCF#2 P4 (throws 3V3 / GND)
+ door limit switch -> PCF#2 P6 + GND
+ buzzer + -> 3V3, buzzer - -> PCF#2 P7 (low-side, boot-safe)
+ keypad ribbon -> PCF#1 (P0-P3 rows, P4-P7 columns)
+
+
+----------------------------------------------------------------------------
+ F. WIRE-COUNT CHECKLIST (tick when the wire is in)
+----------------------------------------------------------------------------
+ power  [ ] panel-MPPT x2   [ ] MPPT-battery x2   [ ] fuse+src-drain x3
+        [ ] gate+100k+BUTTON-1 x3 [ ] bus feeds x6  [ ] buck in/out x4
+ S3     [ ] HX711 x4        [ ] divider x2        [ ] I2C0 x2
+       + AT24C256 x4 (VCC/GND/SDA/SCL)
+        [ ] 555->BTS x3       [ ] L298N x1 (+2 ties on the module)
+        [ ] latch hold x1   [ ] supply relays x2 (until PCF#2)
+ PCF#1  [ ] VCC/GND/SDA/SCL x4 + keypad x8 = 12
+ PCF#2  [ ] VCC/GND/SDA/SCL x4 + IN1/IN2 x2 + buzzer x2 + P2..P6 x5
+        + 10k pull-ups x8 + toggle throws x2 = 23
+ DHT22  [ ] VCC/GND/DATA x3 + 10k pull-up x1 = 4   (chamber return)
+ DHT11  [ ] VCC/GND/DATA x3 + 10k pull-up x1 = 4   (outdoor, shade)
+ cells  [ ] red x2 black x2 white x2 to HX711
+ GOOD LUCK - then run the 18-point QC before the first batch.
+
+============================================================================
+ Source of truth: variants/esp32-s3/config-s3.h - PIN-CONFIG.txt (pin
+ tables) - PIN-MAP.md - manual 02 (sect.4 per module) - design-workflow.drawio
+============================================================================

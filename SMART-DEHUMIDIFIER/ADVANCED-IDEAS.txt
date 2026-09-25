@@ -1,0 +1,207 @@
+================================================================================
+  SMART DEHUMIDIFIER - ADVANCED IDEAS VAULT
+  "Things most people never imagine, at every level of the system"
+================================================================================
+Every idea below bolts onto what you already have. Difficulty legend:
+  [*]      weekend build        [**]     serious hobby project
+  [***]    engineering grade    [****]   you-will-have-a-startup tier
+Where a hook into the existing code exists, the file/module is named.
+GPIO note: nearly all pins are used; almost every idea below that needs more
+IO should add an MCP23017 I2C GPIO expander on the existing Wire bus ($1).
+
+--------------------------------------------------------------------------------
+LEVEL 1 - SENSORS  (know more than "temp and RH")
+--------------------------------------------------------------------------------
+1.1 [*] LOAD CELLS UNDER THE RACKS (HX711, 2 pins + expander)
+      -> Weigh the sticks live. Moisture leaving = grams leaving. The dryer
+         can stop at an EXACT residual moisture % instead of a guess-time.
+         This is the single biggest upgrade imaginable: "dry to weight,
+         not to time". Drying curve = weight curve, automatically logged.
+ 1.2 [*] CO2 + VOC SENSOR IN THE EXHAUST (SGP30 / BME680, I2C)
+      -> The dryer SMELLS the sticks. Incense = volatile oils. When the VOC
+         trend spikes, the coil is cooking the oils away -> auto back off
+         temperature. "Aroma protection mode". Nobody does this.
+ 1.3 [**] INFRON NON-CONTACT SURFACE TEMP (MLX90614)
+      -> Air temp vs stick-core temp differ by degrees. Aim at the rack,
+         know the REAL product temperature, control on that instead.
+ 1.4 [*] ANEMOMETER / DIFFERENTIAL PRESSURE IN THE DUCTS
+      -> Know airflow CFM, not just fan %. Instantly detect clogged filters,
+         blocked vents, a fan that died while its PWM says 40%.
+ 1.5 [**] ABSOLUTE-HUMIDITY CONTROL (math, zero hardware)
+      -> Stop controlling on %RH (misleading, temperature-dependent) and
+         control on grams of water per kg of air + DEW POINT. Vent only when
+         outside air holds fewer g/kg than chamber air. ~30 lines in
+         control.cpp. Smarter than most industrial cabinet dryers.
+ 1.6 [**] COULOMB COUNTER (INA226) ON THE BATTERY
+      -> True state-of-charge by counting amp-hours, not guessing from
+         voltage under load. Plus: energy accounting per batch
+         ("this batch cost 0.42 kWh = 96 g of water evaporated").
+ 1.7 [*] PV PANEL VOLTAGE+CURRENT SENSE (2nd ADC channel + divider)
+      -> Know the sun's harvest in real time. Enables Level-4 ideas.
+ 1.8 [***] ESP32-CAM INSIDE THE LID
+      -> Photos per cycle -> timelapse of your sticks drying + simple
+         computer-vision browning/crack index. Batch visual history.
+ 1.9 [*] PIEZO STETHOSCOPE ON THE FAN BEARINGS
+      -> A failing bearing changes its tone weeks before it fails. Log the
+         spectrum trend -> predictive maintenance for $0.50.
+
+--------------------------------------------------------------------------------
+LEVEL 2 - CONTROL BRAIN  (beyond PID)
+--------------------------------------------------------------------------------
+2.1 [**] AUTO-TUNE BUTTON (relay-method PID tuning)
+      -> One press: the dryer oscillates the heater, watches the response,
+         computes ITS OWN Kp/Ki/Kd for YOUR chamber. Replaces guesswork.
+ 2.2 [***] LEARN THE CHAMBER'S THERMAL MODEL
+      -> After ~5 cycles the firmware knows "my chamber gains 0.9 degC per
+         heater-%-minute and loses 0.04 per minute to ambient". Then it can
+         PREDICT: "reaching 45C in 6:20" shown live, and pre-emptively ramps
+         down before overshoot (model-predictive control, simplified).
+ 2.3 [**] DOOR-OPEN EVENT DETECTION (pure software)
+      -> RH suddenly spikes +10% in 2 s = door opened. Pause PID integration
+         for 60 s so the heater doesn't blast and overshoot. Free upgrade.
+ 2.4 [***] MOISTURE-RATE GOVERNOR ("gentleness")
+      -> With load cells (1.1): drying TOO FAST cracks sticks. Cap
+         d(weight)/dt at a recipe-safe rate. The dryer becomes gentler than
+         any human could be, 24/7.
+ 2.5 [***] RECIPE PRESETS: named drying profiles
+      -> "Sandal 42C slow", "Masala 48C fast", "Charcoal pre-dry" - stored
+         in NVS, selectable on the website. One tap = whole configuration.
+ 2.6 [****] LEARN FROM EVERY BATCH (on your GitHub data)
+      -> You already back cycles to GitHub. A tiny script can compare batch
+         curves, correlate with the quality rating YOU type in, and next
+         season it SUGGESTS: "last 3 best batches used 43.5C for 118 min".
+         The dryer gets better at your specific sticks every run.
+ 2.7 [**] THERMAL RUNAWAY EARLY WARNING
+      -> Watch dT/dt: if temperature is rising faster than the heater could
+         physically cause -> combustion risk -> instant cut + alarm. Faster
+         than the fixed 60C trip point.
+
+--------------------------------------------------------------------------------
+LEVEL 3 - POWER & ENERGY  (the solar game)
+--------------------------------------------------------------------------------
+3.1 [***] SOLAR-FOLLOWING HEATER ("dry on pure sunshine")
+      -> With PV sensing (1.7): heater duty = exactly the solar SURPLUS.
+         Battery never discharges for heat; clouds -> coil eases off;
+         sun returns -> coil ramps. Battery only runs fans + ESP. Your
+         drying cost approaches zero on clear days.
+ 3.2 [**] ENERGY-PER-BATCH REPORT
+      -> kWh in, grams of water out, kWh per kg of product. A cost sheet
+         no small incense unit has ever had. (needs 1.6)
+ 3.3 [***] THERMAL BATTERY: BRICKS + NIGHT PRE-HEAT
+      -> Fill the chamber's base with bricks. If bypass = grid, warm the
+         bricks at cheap night hours; bricks release heat all day. Heat
+         storage without a single battery cell.
+ 3.4 [**] SOLAR AIR HEATER PRE-STAGE (pure hardware)
+      -> Black corrugated metal sheet + glass cover + the intake fan:
+         outside air arrives pre-heated 15-25K FREE before the coil. The
+         coil then only trims. Cuts coil energy hugely for the cost of
+         scrap metal and a glass sheet.
+ 3.5 [**] DESICCANT LOOP FOR MONSOON (silica gel + 2 dampers)
+      -> Outside air at 90% RH? Close the chamber, circulate through a
+         silica-gel cartridge, regenerate the gel with coil heat at night.
+         Dry when the atmosphere itself is a swamp.
+ 3.6 [***] HEAT RECOVERY COUNTERFLOW (mechanical)
+      -> Exhaust air pre-heats incoming air through a simple DIY heat
+         exchanger (aluminum sheets, counterflow). 30-40% of heat you are
+         currently throwing away, recovered. Payback in weeks.
+
+--------------------------------------------------------------------------------
+LEVEL 4 - DATA & HISTORY  (you already log - now THINK with it)
+--------------------------------------------------------------------------------
+4.1 [*] QR CODE PER BATCH
+      -> auto-name each cycle file, print a QR that links to it, stick it
+         on the dried box. Scan a box in 2028 -> see its exact drying curve.
+4.2 [**] DRYING-SIGNATURE ANOMALY DETECTION
+      -> Every good batch has a similar curve shape. New batch deviates
+         (sensor drift, changed sticks, weather) -> flag "this batch dried
+         ABNORMALLY" on the website. Even a spreadsheet can do this.
+ 4.3 [**] FIT THE DRYING CONSTANT k (with load cells)
+      -> Moisture loss follows an exponential; every batch has a constant
+         k. Track k per recipe/season/wood batch - actual food-science
+         grade process control for incense.
+ 4.4 [*] FREE GRAFANA DASHBOARD FROM GITHUB
+      -> Your cycle CSVs are already in a repo; a GitHub Action can render
+         weekly graphs (energy, humidity peaks, durations) automatically.
+
+--------------------------------------------------------------------------------
+LEVEL 5 - WEBSITE / INTERFACE  (beyond the dashboard)
+--------------------------------------------------------------------------------
+5.1 [*] PWA: INSTALLABLE APP ICON (manifest + service worker)
+      -> "Install" the dashboard; it opens full-screen like a real Android
+         app, remembers the last screen, works instantly on the hotspot.
+ 5.2 [*] VOICE CONTROL (offline Web Speech API, phone-side)
+      -> "Start drying two hours" / "stop" - Telugu or English, zero
+         servers. The mic never touches the ESP.
+ 5.3 [**] NOTIFICATIONS WHEN DONE / FAULT (Notification API + reconnect)
+      -> Phone buzzes when the relay cuts power or a fault fires (works
+         while the page is open; escalate to email via GitHub Action).
+ 5.4 [**] OTA FIRMWARE UPDATE FROM THE WEBSITE
+      -> Upload page on the site -> ESP re-flashes itself (Update.h +
+         multipart upload). Never touch a USB cable again after install.
+ 5.5 [*] mDNS: type dryer.local instead of 192.168.4.1
+ 5.6 [*] OPERATOR / OWNER PIN LEVELS
+      -> Staff can start/stop; only your PIN changes thresholds.
+ 5.7 [*] MULTilingual UI (Telugu / Hindi / English toggle)
+ 5.8 [**] 3-D CHAMBER HEAT-VIEW
+      -> Interpolate a live gradient map between the two sensors + the
+         model from 2.2 - see stratification, place racks smarter.
+
+--------------------------------------------------------------------------------
+LEVEL 6 - CONNECTIVITY  (ESP stays offline, world still reaches it)
+--------------------------------------------------------------------------------
+6.1 [***] TELEGRAM / REMOTE CONTROL VIA THE PHONE BRIDGE
+      -> Extend the existing weather-relay idea: the browser (or a tiny
+         always-on Android box at home) shuttles commands both ways. Check
+         the dryer from another state; start a batch before you arrive.
+ 6.2 [**] ESP-NOW MESH OF DRYERS
+      -> Multiple dryers talk to each other directly (no router) - one
+         dashboard for the whole unit; a dryer with spare solar lends
+         power-scheduling info to the others.
+ 6.3 [**] LoRa LINK (2 km, no WiFi at all)
+      -> Dryer in the field, you in the house: long-range telemetry +
+         start/stop with a $6 module pair.
+ 6.4 [**] MQTT THROUGH THE BRIDGE -> HOME ASSISTANT
+      -> The dryer becomes a first-class smart-home device; automations
+         like "if solar surplus > 500W, start dryer".
+ 6.5 [***] $2 SIM800L FALLBACK (true independence)
+      -> SMS-based "STATUS" / "STOP" - remote control that works with no
+         phone nearby, no internet, ever. Ultimate reliability tier.
+
+--------------------------------------------------------------------------------
+LEVEL 7 - MECHANICAL / CHAMBER  (electronics can only be as good as the box)
+--------------------------------------------------------------------------------
+7.1 [**] MOTORISED DAMPERS (servo or stepper on vents)
+      -> True airflow CONTROL (position, not just fan speed) -> hold
+         chamber pressure/slightly negative -> dust + aroma stay in.
+ 7.2 [*] PER-SHELF SENSING (move AHT10s to rack tips)
+      -> Chamber stratifies: top shelf dries first. Map it, rotate racks
+         by data, not habit.
+ 7.3 [**] PASSIVE FAIL-SAFE CHIMNEY DAMPER
+      -> A wax-motor or bimetal damper that opens itself when hot -
+         airflow even if every electron dies. Safety with zero watts.
+
+--------------------------------------------------------------------------------
+LEVEL 8 - QUALITY SCIENCE  (the unimaginable tier)
+--------------------------------------------------------------------------------
+8.1 [****] AROMA-INDEX SCORING (VOC 1.2 + history)
+      -> Correlate exhaust-VOC shape with how the batch finally smells
+         (your one-tap rating). After a season, the dryer PREDICTS aroma
+         quality at the end of each cycle.
+ 8.2 [****] FULL CLOSED-LOOP RECIPE SYNTHESIS
+      -> Target: "moisture 7%, max gentleness, done by 6 PM, use max solar"
+         -> the system computes the whole profile itself (temp curve, RH
+         band, damper plan) from its learned models and the weather
+         forecast you already pipe in. You press START; it does the art.
+ 8.3 [***] DIGITAL TWIN
+      -> A simulator of your chamber (the thermal model from 2.2 + moisture
+         model from 4.3) running INSIDE the website: "what if 47C for 90
+         min?" - see the predicted result before risking real sticks.
+
+================================================================================
+THE LADDER (if you only do three things)
+================================================================================
+  FIRST  -> 1.1 load cells (dry to weight)      : changes everything
+  SECOND -> 2.1 auto-tune + 1.5 absolute RH     : free intelligence
+  THIRD  -> 3.1 solar-following + 3.4 air heater: near-zero energy drying
+Everything else stacks on those.
+================================================================================
