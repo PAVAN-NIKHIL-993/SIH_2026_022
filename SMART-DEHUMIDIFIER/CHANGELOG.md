@@ -3,6 +3,62 @@
 All notable changes to the Smart Dehumidifier firmware & UI.
 Firmware ships as one file: `arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DEHUMIDIFIER-single-file.ino`.
 
+## 2026-09 (v2.0.22 — sources restored, every sketch compiled for real)
+
+- **Firmware sources restored exactly to v2.0.21.** The first import (from
+  the Arena patch files) applied 23 partial diffs onto v2.0.19 text instead
+  of their real base. 14 files were still garbled, so **neither sketch
+  could compile**:
+  - `control.h` had no `struct LogRec`;
+  - `main.cpp` had lost the settings / sensors / battery / dryer init;
+  - `web.cpp`, `config.h`, `buzzer.*` and `cyclelog.*` carried hundreds of
+    duplicated lines;
+  - `platformio.ini` had lost `board = esp32dev`.
+
+  The files were recovered byte-exact: the v2.0.21 patch was applied onto
+  its real base (the old `arena` repo, commit 48ee940), every file was
+  hash-verified against the patch, and the v2.0.21 renames were then
+  re-applied. `tools/audit-symbols.py` had been reporting this all along
+  but was not wired into the gate.
+- **Real compile on every push** (`scripts/compile-sketches.sh`, arduino-cli,
+  esp32 core 3.3.12 / AVR 1.8.8) — 16 builds:
+  - both firmware variants, plus the S3 firmware in `DRYER_RTOS=1` mode;
+  - `board-test-s3`, the 10 sensor tests and the 2 UNO display sketches.
+
+  It found and fixed:
+  - **classic ESP32 firmware did not link**: the serial `rtc` / `rtcset`
+    commands call the DS1302 driver, which compiles out with
+    `RTC_ENABLED 0`. `rtc.cpp` now provides the no-op API that `rtc.h`
+    documents.
+  - `rtc-test`: its `bitWrite()` / `bitRead()` helpers clashed with
+    Arduino's macros (renamed the way `src/rtc.cpp` was in v2.0.21).
+  - `board-test-s3`: `ESP.getEfuseMac()` was misused, and the MAC line
+    printed its bytes scrambled.
+  - `battery-test`: a String label was passed as `const char*`.
+  - `dht-test`: the IDE's auto-prototype landed above `struct DhtDev`.
+- **Online UI**: `ONLINE_UI_URL` → `https://pavan-nikhil-993.github.io/SIH_2026_022/`.
+  It pointed at the old `arena` repo, which has no Pages site. The Pages
+  setup steps now say Source: **GitHub Actions**; a branch deploy cannot
+  serve `SMART-DEHUMIDIFIER/docs`.
+- **CI / tooling**:
+  - `check-all.sh` grows from 4 to 6 steps: the symbol audit and the host
+    DS1302 driver test join it.
+  - GitHub Actions move to Node 24 (checkout / setup-node / setup-python
+    v7, configure-pages v6, upload-pages-artifact v5, deploy-pages v5).
+  - The Pages deploy now *skips* with a notice until Pages is enabled,
+    instead of failing every push to main.
+  - jsdom moves to 30.
+- **Docs**:
+  - stale S3 pins corrected (outdoor DHT11 = 41, door = 21);
+  - ArduinoJson instructions removed (the firmware needs no libraries);
+  - repo name updated; a broken README anchor fixed.
+- **Repo hygiene**:
+  - the four patch dumps (~15 MB) are removed from the root and kept in
+    git history;
+  - the host RTC test outputs are gitignored;
+  - the final newline stripped by the import is restored in 104 files.
+- `FW_VERSION` 2.0.22.
+
 ## 2026-09 (v2.0.21 — DS1302 real-time clock, S3)
 
 - **Date & time that survive a FULL power-down**: DS1302 RTC module
