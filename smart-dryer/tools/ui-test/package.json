@@ -1,0 +1,7 @@
+{
+  "name": "dryer-ui-test",
+  "private": true,
+  "description": "Headless smoke test for the embedded dashboard page",
+  "scripts": { "test": "node ui-test.js" },
+  "devDependencies": { "jsdom": "^24.0.0" }
+}
