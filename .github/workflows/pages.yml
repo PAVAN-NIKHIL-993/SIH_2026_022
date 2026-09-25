@@ -1,4 +1,4 @@
-# Deploys the online dryer UI (smart-dehumidifier/docs/index.html) to GitHub Pages.
+# Deploys the online dryer UI (SMART-DEHUMIDIFIER/docs/index.html) to GitHub Pages.
 # Site: https://pavan-nikhil-993.github.io/arena/   (must match ONLINE_UI_URL)
 # Repo Settings -> Pages -> Source: GitHub Actions
 name: Deploy online UI to Pages
@@ -6,7 +6,7 @@ name: Deploy online UI to Pages
 on:
   push:
     branches: [main]
-    paths: ['smart-dehumidifier/docs/**']
+    paths: ['SMART-DEHUMIDIFIER/docs/**']
   workflow_dispatch:
 
 permissions:
@@ -29,6 +29,6 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: smart-dehumidifier/docs      # index.html served at the site root
+          path: SMART-DEHUMIDIFIER/docs      # index.html served at the site root
       - uses: actions/deploy-pages@v4
         id: deployment
