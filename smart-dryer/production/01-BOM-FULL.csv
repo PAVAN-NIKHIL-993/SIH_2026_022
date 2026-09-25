@@ -1,0 +1,41 @@
+Part,Category,Qty,Spec,Est.Cost.INR,Notes
+550 W solar panel,Power,1,24 V nominal / ~41 Vmp mono or poly,"15,000-20,000",~Rs.30/W; verify Voc fits the MPPT input range
+MPPT charge controller,Power,1,20 A+ MPPT 12 V battery-side,"3,000-8,000",PWM works but harvests ~20 % less
+12.8 V LiFePO4 battery,Power,1,4S 50-100 Ah with >=50 A BMS,"15,000-28,000",product default; SLA 100 Ah+ is the budget path
+50 A blade fuse + holder,Power,1,heater rail fuse at battery +,"150-300",mandatory
+P-MOSFET (SUP53P06 / IRF9540) + 100k resistor,Power,1,source->battery+ drain->buck; gate latch,"30-60",v2.0 hard power-off: hold pin S3 GPIO14 / classic GPIO16 (BUTTON-1 3 s off / 10 s reboot)
+5 V buck converter,Power,1,LM2596 / mini-360 set to 5.0 V,"60-120",set to 5.0 V BEFORE connecting the ESP32
+2-channel relay module,Power,1,CH1 solar feed / CH2 bypass feed,"60-100",S3 GPIO 6/7 - MCU switches only with loads quiet
+BTS7960 43 A H-bridge,Control,1,heatsink fitted,"250-350",drives the 500 W coil (RPWM via the 555 shifter)
+L298N dual H-bridge,Control,1,remove ENB jumper cap; IN3->5V IN4->GND tied on the module (fixed dir v2.0.10); 10k ENB->GND,"60-100",ONE outlet fan - ENB (GPIO17) is the only wired pin
+555 timer level shifter,Control,1,3.3 V -> 5 V PWM for RPWM,"80-150",built board
+ESP32-S3 DevKitC,Control,1,any DevKitC: N8 / N16 / N16R8 (v2.0.13 pin map avoids GPIO 35/36/37 so octal-PSRAM boards work),"450-700",every v2.0 feature has its own pin + BOOT button start/stop
+ESP32 DevKit V1,Control,1,30-pin (classic variant),"300-500",supported fallback - same features on shared pins
+AHT10 sensor module,Sensors,1,fixed 0x38 address,"160-300",chamber TOP - the precision sensor on the hottest point (v2.0.9)
+HX711 + 2 x 5 kg half-bridge load cells,Input,1,cells under the bottom tray rails,"300-400",S3: CLK GPIO1 DOUT GPIO2 (classic: 12/34); cells OUTSIDE the hot chamber
+Door solenoid lock 12 V + driver + flyback diode,Door,OPTIONAL,NOT FITTED in this build (limit switch only),"150-400",add later: DOOR_LOCK_ENABLED 1 + a free GPIO (3/11)
+Limit switch (or reed contact),Door,1,door closed = LOW (INPUT_PULLUP),"20-50",S3 GPIO 21 - opening mid-cycle = FAULT
+PC817 optocoupler module,Input,1,selected-supply live check,"15-25",classic GPIO35 / S3 GPIO18 (R8-safe) - HIGH = feed present
+Momentary panel buttons,Input,2,BUTTON-1 master power / BUTTON-2 default automation,"20-40",S3 GPIO15/16 - classic GPIO15/18 - to GND
+SPDT toggle switch,Input,1,solar / bypass mode request,"15-30",S3 GPIO39 / classic GPIO27
+Buzzer module KY-012,Input,1,active module,"10-30",MANDATORY v2.0: classic GPIO13 / S3 GPIO38
+80 mm 12 V fan,Actuators,1,outlet (exhaust) only,"100-200",v2.0 removed the intake fan; L298N ENB = S3 GPIO17 / classic GPIO14
+4x4 hex keypad + PCF8574 backpack,Input,1,buy PCF8574 NOT PCF8574A,"150-280",0x20 clash-free; full menu navigation (B menu 2/4/6/8 arrows A ok C mode D run)
+PCF8574 module #2 (front panel, mixed I/O),Expander,1,strap A0->3V3 A1/A2->GND = 0x21; PCF8574 NOT PCF8574A,"60-90",P0/P1 supply relays + P2/P3 buttons + P4 toggle + P5 opto + P6 door switch + P7 buzzer; needs 8x 10k pull-ups
+Nichrome wire 1.0 mm,Heater,2.3 m,0.32 ohm total (2 x 0.64 ohm parallel),"150-250",500 W @ 12.6 V
+Ceramic standoffs M4,Heater,8,coil to mesh shelf,"100-200",no metal contact
+Pillar body steel/SS,Structure,1,300 x 300 mm x 1830 mm,"3,000-8,000",or 12 mm sealed plywood (half cost)
+Insulation 10 mm,Structure,0.5 m2,ceramic wool / glass mat >=200 C,"400-800",chamber walls + lid
+Stainless mesh trays,Structure,6,290 x 290 mm + rails,"1,200-2,400",8 ft option: 9 trays
+Hinges + latches,Structure,3 + 3,stainless,"300-600",door seals with the silicone rope
+Locking castors,Structure,4,50 mm,"400-800",demo pillar must roll
+Silicone rope gasket 3 mm,Structure,1 m,door seal,"150-300",
+Cable glands,Structure,6,sensor / fan / coil / battery / panel leads,"300-600",
+Wire 2.5 mm2 silicone,Power,1 m,coil + battery leads,"100-200",keep runs <300 mm
+Wire 1.0 / 0.5 mm2,Power,3 m,fans + buck + signals,"100-200",
+Terminal strips + labels,Assembly,1 set,,"200-400",label BOTH ends of every wire
+Heat-shrink + zip ties,Assembly,1 set,,"150-300",
+DHT22 / AM2302 sensor,Sensors,1,chamber cool-return source #2; GPIO10 + 10k pull-up (v2.0.9),"150-250",2nd chamber sensor: averages + RH-peak + safety cut keep working
+DHT11 outdoor sensor,Sensors,1,3-wire; GPIO 41 + 10k pull-up; north-side shade,"100-180",outdoor weather + real-time smart venting + web OUT line + CSV columns
+DS1302 RTC module (CR2032 coin cell),Sensors,1,3-wire; S3: RST 40 / SCLK 42 / I-O 47; VCC->3V3; BZ unused,"30-60","date & time that survive a FULL power-down (v2.0.21); auto-detected - no chip = phone-sync + NVS clock
+INA226 I2C power monitor,FUTURE,1,spec future/04 (0x40 on Wire),"250",solar telemetry upgrade
