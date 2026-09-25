@@ -76,7 +76,7 @@ struct SerialMock {
   template <class... A> void printf(const char *f, A... a) { puts(f); }
   void println(const char *s) { fputs(s, stdout); fputc('\n', stdout); }
 };
-static SerialMock serialMockObj;
+[[maybe_unused]] static SerialMock serialMockObj;   // not every TU prints
 #define Serial serialMockObj
 enum { INPUT = 0, OUTPUT = 1, INPUT_PULLUP = 2, INPUT_PULLDOWN = 3, HIGH = 1, LOW = 0 };
 static inline void pinMode(int p, int m) { (void)p; (void)m; }
