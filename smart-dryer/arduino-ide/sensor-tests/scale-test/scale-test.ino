@@ -1,5 +1,5 @@
 /**
- * WEIGH SCALE TEST - Smart DeHummidifier (sensor suite, v2.0.20)
+ * WEIGH SCALE TEST - Smart Dehumidifier (sensor suite, v2.0.20)
  * ===================================================================
  * Checks the HX711 + 2 x half-bridge load cells ("dry to weight") with
  * the SAME bit-bang driver the firmware uses (no HX711 library needed).

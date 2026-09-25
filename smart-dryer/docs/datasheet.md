@@ -1,4 +1,4 @@
-# SMART DEHUMMIDIFIER PILLAR — Product Datasheet
+# SMART DEHUMIDIFIER PILLAR — Product Datasheet
 
 **Solar agarbatti drying pillar · 550 W panel class · ESP32-controlled**
 Version 1.0 · 2026-09

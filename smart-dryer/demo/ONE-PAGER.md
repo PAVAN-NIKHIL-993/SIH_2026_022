@@ -1,4 +1,4 @@
-# SMART DEHUMMIDIFIER PILLAR — one page
+# SMART DEHUMIDIFIER PILLAR — one page
 
 **Problem:** agarbatti drying burns fuel/electricity, needs attendance, and
 quality depends on guesswork. Rural workshops have sun but no internet.

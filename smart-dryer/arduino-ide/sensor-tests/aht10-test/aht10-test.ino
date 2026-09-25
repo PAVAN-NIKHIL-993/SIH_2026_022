@@ -1,5 +1,5 @@
 /**
- * AHT10 SENSOR TEST - Smart DeHummidifier (sensor suite, v2.0.20)
+ * AHT10 SENSOR TEST - Smart Dehumidifier (sensor suite, v2.0.20)
  * ===================================================================
  * Checks the AHT10 chamber temperature/humidity sensor(s) with the
  * SAME raw-I2C driver the firmware uses (no extra libraries needed).

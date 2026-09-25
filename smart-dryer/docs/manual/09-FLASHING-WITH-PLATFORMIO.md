@@ -75,7 +75,7 @@ The rest of this document is the **VS Code + PlatformIO** procedure.
 
 ```
 =========================================
-  SMART DEHUMMIDIFIER  v1.0
+  SMART DEHUMIDIFIER  v1.0
   ESP32 + BTS7960 + L298N + AHT10 + DHT22 + DHT11
 =========================================
 [cfg] setTemp=45.0C max=60C RH 40-60% time=120min

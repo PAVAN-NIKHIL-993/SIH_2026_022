@@ -1,5 +1,5 @@
 /**
- * SUPPLY SELECTOR TEST - Smart DeHummidifier (sensor suite, v2.0.20)
+ * SUPPLY SELECTOR TEST - Smart Dehumidifier (sensor suite, v2.0.20)
  * ===================================================================
  * Checks the two power-source inputs the dryer uses to know which
  * feed is selected and which one is actually live:

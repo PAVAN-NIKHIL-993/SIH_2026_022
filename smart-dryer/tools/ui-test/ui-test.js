@@ -192,7 +192,7 @@ setTimeout(async () => {
     check('supply pill SOLAR live', $('supPill').textContent.includes('SOLAR'));
     check('DHT22 measured outdoor shown', $('wxOut').textContent.includes('31.5') && $('wxOut').textContent.includes('62'));
     check('display-view link present', window.document.body.innerHTML.includes('/display'));
-    check('kiosk /display page exists in firmware', dispHtml.includes('SMART DEHUMMIDIFIER - display') && dispHtml.includes('api/data') && dispHtml.includes('wakeLock'));
+    check('kiosk /display page exists in firmware', dispHtml.includes('SMART DEHUMIDIFIER - display') && dispHtml.includes('api/data') && dispHtml.includes('wakeLock'));
     check('kiosk clock shown + settable (tap)', dispHtml.includes('id="clk"') && dispHtml.includes('/api/settime') && dispHtml.includes('kdt'));
     check('dashboard manual clock form', html.includes('f_dt') && html.includes('setClockManual'));
     check('E-code fault card present', html.includes('faultRec') && html.includes('warnBox'));

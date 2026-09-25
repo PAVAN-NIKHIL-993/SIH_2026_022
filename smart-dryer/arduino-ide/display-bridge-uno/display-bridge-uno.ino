@@ -1,6 +1,6 @@
 /*
  * ============================================================================
- *  SMART DEHUMMIDIFIER - DISPLAY BRIDGE for Arduino UNO / Nano / Mega 2560
+ *  SMART DEHUMIDIFIER - DISPLAY BRIDGE for Arduino UNO / Nano / Mega 2560
  * ============================================================================
  *  Drives the PARALLEL "UNO-shield" 3.5" TFT (the one with D0-D7 + WR + RD
  *  pins - it plugs straight onto an Arduino UNO) and shows the dryer's live
@@ -142,7 +142,7 @@ void apply(char *line) {
 void drawScreen() {
   // title bar
   tft.fillRect(0, 0, 480, 30, C_NAVY2);
-  txt(8, 8, 2, C_GOLD, "SMART DEHUMMIDIFIER");
+  txt(8, 8, 2, C_GOLD, "SMART DEHUMIDIFIER");
   txt(200, 8, 2, f_live ? C_GREEN : C_RED, f_sup);
   txt(384, 8, 2, C_WHITE, modeName());
 
@@ -187,7 +187,7 @@ void drawScreen() {
 
 void drawWaiting() {
   tft.fillScreen(C_NAVY);
-  txt(60, 120, 3, C_GOLD, "SMART DEHUMMIDIFIER DISPLAY");
+  txt(60, 120, 3, C_GOLD, "SMART DEHUMIDIFIER DISPLAY");
   txt(60, 160, 2, C_DIM, "waiting for the dryer (S3)...");
   char b[60];
   snprintf(b, sizeof(b), "check wire: S3 GPIO3 -> Arduino pin %d + GND", BR_RX_PIN);

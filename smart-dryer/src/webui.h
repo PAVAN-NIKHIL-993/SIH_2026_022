@@ -22,7 +22,7 @@ static const char INDEX_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Smart DeHummidifier</title>
+<title>Smart Dehumidifier</title>
 <style>
 :root{
 --bg:#070b14;--bg2:#0a1120;--card:#0d1526;--card2:#111b30;--line:#1b2740;
@@ -1141,7 +1141,7 @@ addEventListener('resize',draw);
 static const char ONLINE_LOADER_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Smart DeHummidifier - online interface</title>
+<title>Smart Dehumidifier - online interface</title>
 <style>body{margin:0;background:#101512;color:#e8f0ea;font:15px system-ui;
 height:100vh;display:flex;align-items:center;justify-content:center;text-align:center}
 #m{opacity:.75;padding:20px}a{color:#38bdf8}iframe{border:0;width:100vw;height:100vh}</style>
@@ -1176,7 +1176,7 @@ setTimeout(function(){if(!seen)location.replace('/')},7000);  // no internet -> 
 static const char DISPLAY_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SMART DEHUMMIDIFIER - display</title>
+<title>SMART DEHUMIDIFIER - display</title>
 <style>
 :root{--navy:#0b1026;--navy2:#141b3d;--card:#10173a;--gold:#f4c25e;
 --blue:#4e9ff4;--green:#3ddc84;--red:#ff5f6b;--dim:#8b93b8;--white:#eef2ff}
@@ -1225,7 +1225,7 @@ background:var(--navy2);color:var(--white);cursor:pointer;font-family:inherit}
 #vpPad button small{display:block;font-size:1.9vmin;font-weight:600;color:var(--dim)}
 @media(max-width:720px){#vpWrap{flex-direction:column}#vpPad{width:100%}}
 </style></head><body>
-<div class="bar"><span><b>SMART DEHUMMIDIFIER</b> <span id="fw"></span></span>
+<div class="bar"><span><b>SMART DEHUMIDIFIER</b> <span id="fw"></span></span>
 <span><a id="vpBtn" onclick="vpToggle()" title="Virtual keypad - landscape text + 4x4 pad"
   style="color:var(--dim);text-decoration:none;margin-right:2vmin;cursor:pointer">&#9000; keypad</a><a href="/eelog.csv" download title="Download all cycle data (CSV)"
   style="color:var(--dim);text-decoration:none;margin-right:2vmin">&#11015; data</a><span id="clk" onclick="clkPane()">&#9201; --</span><span id="sup" class="ok">&#9728; SOLAR MODE</span>

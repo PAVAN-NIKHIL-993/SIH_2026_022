@@ -24,7 +24,7 @@
   </style>
 
   <rect x="0" y="0" width="1120" height="790" fill="#ffffff"/>
-  <text x="20" y="30" font-size="20" font-weight="800" fill="#0f172a">Smart DeHummidifier — wiring overview</text>
+  <text x="20" y="30" font-size="20" font-weight="800" fill="#0f172a">Smart Dehumidifier — wiring overview</text>
   <text x="20" y="48" class="sub">all grounds common · solar panel → BMS → battery → BMS out · relay cuts power at end of cycle</text>
 
   <!-- ================= ESP32 ================= -->

@@ -1,5 +1,5 @@
 /**
- * DS1302 RTC TEST - Smart DeHummidifier (sensor suite, v2.0.21)
+ * DS1302 RTC TEST - Smart Dehumidifier (sensor suite, v2.0.21)
  * ===================================================================
  * Checks the DS1302 real-time clock with the SAME bit-bang driver the
  * firmware uses (src/rtc.cpp - no RTC library needed): auto-detect

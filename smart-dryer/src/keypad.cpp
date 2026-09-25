@@ -66,4 +66,3 @@ char I2CKeypad::update() {
 I2CKeypad keypad;                          // stub instance (methods inline no-ops)
 
 #endif
-#endif

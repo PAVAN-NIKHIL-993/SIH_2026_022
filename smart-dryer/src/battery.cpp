@@ -21,6 +21,7 @@ uint8_t BatteryMonitor::percentFor(float v, uint8_t type) {
   return (uint8_t)(pct + 0.5f);
 }
 
+void BatteryMonitor::begin() {
   pinMode(PIN_VBAT_ADC, INPUT);
   analogSetPinAttenuation(PIN_VBAT_ADC, ADC_11db);   // full 0-2.45 V usable window
   if (PIN_VBAT_ENABLE >= 0) pinMode(PIN_VBAT_ENABLE, OUTPUT);
@@ -34,11 +35,6 @@ uint8_t BatteryMonitor::percentFor(float v, uint8_t type) {
 void BatteryMonitor::setBypass(bool on) {
   _bypass = on;
 #if RELAYS_ENABLED
-  digitalWrite(PIN_BYPASS_CTRL, on ? HIGH : LOW);
-#endif
-}
-
-float BatteryMonitor::readVoltsOnce() {
   digitalWrite(PIN_BYPASS_CTRL, on ? HIGH : LOW);
 #endif
 }

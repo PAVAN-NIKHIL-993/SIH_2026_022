@@ -1,5 +1,5 @@
 /**
- * BATTERY SENSE TEST - Smart DeHummidifier (sensor suite, v2.0.20)
+ * BATTERY SENSE TEST - Smart Dehumidifier (sensor suite, v2.0.20)
  * ===================================================================
  * Checks the battery voltage divider + ADC, exactly as the firmware
  * samples it (16 x oversample, low-side transistor gated).

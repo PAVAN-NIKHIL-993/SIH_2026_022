@@ -36,24 +36,6 @@ public:
 
   float tAvg()   const { return _tAvg; }   // mean of healthy sensors (heat PID)
   float hAvg()   const { return _hAvg; }
-  bool  s1ok()   const { return _s1.ok(); }
-  float t1()     const { return _s1.tempC(); }
-
-private:
-  void recompute();
-  AHT10 _s1;                    // chamber top (I2C0)
-#if !SENS2_DHT
-  AHT10 _s2;                    // classic: bottom of chamber (I2C1)
-#endif
-  float _tAvg = NAN, _hAvg = NAN, _hMax = NAN, _tMax = NAN;
-};
-  bool  s2ok()   const { return _s2.ok(); }
-  float t2()     const { return _s2.tempC(); }
-  float h2()     const { return _s2.humRH(); }
-#endif
-
-  float tAvg()   const { return _tAvg; }   // mean of healthy sensors (heat PID)
-  float hAvg()   const { return _hAvg; }
   float hMax()   const { return _hMax; }   // wettest sensor (fan law, completion)
   float tMax()   const { return _tMax; }   // hottest sensor (safety cut)
 

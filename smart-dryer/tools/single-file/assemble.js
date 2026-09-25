@@ -121,7 +121,7 @@ for (const n of notes) pinRef += ` *    NOTE: ${n}\n`;
 
 const banner = `/*
  * ============================================================================
- *  SMART DEHUMMIDIFIER - SINGLE-FILE SKETCH (whole project, one file)
+ *  SMART DEHUMIDIFIER - SINGLE-FILE SKETCH (whole project, one file)
  * ============================================================================
  *  Generated from the multi-file sources by tools/single-file/assemble.js -
  *  do not edit by hand; edit src/ and regenerate.

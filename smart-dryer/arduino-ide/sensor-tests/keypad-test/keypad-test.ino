@@ -1,5 +1,5 @@
 /**
- * KEYPAD TEST - Smart DeHummidifier (sensor suite, v2.0.20)
+ * KEYPAD TEST - Smart Dehumidifier (sensor suite, v2.0.20)
  * ===================================================================
  * Checks the 16-key hex keypad on its PCF8574 I2C backpack, using the
  * same row/column sweep the firmware uses (no Keypad library needed).

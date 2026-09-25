@@ -1,7 +1,7 @@
 /**
  * @file config-s3.h
  * @brief Central pin map + compiled-in DEFAULT thresholds for the
- *        Smart DeHummidifier (ESP32-S3 + BTS7960 + L298N + AHT10
+ *        Smart Dehumidifier (ESP32-S3 + BTS7960 + L298N + AHT10
  *        chamber #1 + DHT22 chamber #2 + DHT11 outdoor).
  *
  * Everything in the "DEFAULTS" section can be overridden from the website
@@ -28,7 +28,7 @@
 //  PRODUCT IDENTITY (boot splash + website header)
 // =====================================================================
 #define BRAND_NAME   "ARCHITECTS OF SOLUTIONS"
-#define PRODUCT_NAME "SMART DEHUMMIDIFIER"
+#define PRODUCT_NAME "SMART DEHUMIDIFIER"
 #define BOOT_INIT_MS 10000     // all outputs LOW -> splash + self-test +
                                // power-on beeps for 10 s, then the main screen
 

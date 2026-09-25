@@ -1,6 +1,6 @@
-# Changelog — Smart DeHummidifier Pillar
+# Changelog — Smart Dehumidifier Pillar
 
-All notable changes to the Smart DeHummidifier firmware & UI.
+All notable changes to the Smart Dehumidifier firmware & UI.
 Firmware ships as one file: `arduino-ide/smart-dryer-single-file/smart-dryer-single-file.ino`.
 
 ## 2026-09 (v2.0.21 — DS1302 real-time clock, S3)
@@ -22,7 +22,7 @@ Firmware ships as one file: `arduino-ide/smart-dryer-single-file/smart-dryer-sin
   RTC status; web page has the time-sync row with the RTC state.
 - Bench sketch: `arduino-ide/sensor-tests/rtc-test/` — same pins,
   "SET TIME FROM PHONE" with re-read verification.
-- **Product name → "Smart DeHummidifier"** (PRODUCT_NAME + web UI titles).
+- **Product name → "Smart Dehumidifier"** (PRODUCT_NAME + web UI titles).
 - Free pool shrinks: S3 free GPIOs are now **3, 11** (40/42/47 carry
   the RTC). All pin docs, BOM, checklist, build manual, variants README,
   sensor-tests README and the design diagrams updated to match.
@@ -225,7 +225,7 @@ registry line. AT24C256 absent = registry simply off, nothing else changes.
 - **Fan law replaced (single outlet fan):** RH ≥ 60 % for 1 min → 100 % for 60 s (fanTrigRH/fanTrigMin/fanBurstS adjustable); intake fan removed (pins freed for the power hardware); purge unchanged.
 - **New faults (spec):** heater failure = temperature flat 3 min while heating at 80 %+ duty; fan error = RH ≥ 60 % for 5 min despite bursts.
 - **Target weight:** targetG setting; live initial/target/diff on TFT + site; 5 min before time-up a warning beeps and suggests the +minutes needed (from the live g/min rate); at time-up within 5 % = complete, else DONE-WITH-WARNING (time is the master).
-- **Boot:** all outputs LOW, splash "ARCHITECTS OF SOLUTIONS / SMART DEHUMMIDIFIER", 2/s × 3 s power-on beeps, 10 s initialisation window; full beep set (3 s start · 5 s end · 5 s errors · 1 s door · 3 s mode change); buzzer fitted by default (classic 13, S3 38).
+- **Boot:** all outputs LOW, splash "ARCHITECTS OF SOLUTIONS / SMART DEHUMIDIFIER", 2/s × 3 s power-on beeps, 10 s initialisation window; full beep set (3 s start · 5 s end · 5 s errors · 1 s door · 3 s mode change); buzzer fitted by default (classic 13, S3 38).
 - **TFT overhaul:** supply + parameter mode in the title, elapsed + remaining, weight line with target/diff, fan ON/OFF/%, external temperature, cycle spark-line graph, menu screens.
 - **Website:** header brand, SOLAR/BYPASS pill (red when the feed is dead), mode preset buttons, target-weight + fan-burst fields, weight tile target/diff, setTemp clamped 40–80.
 - Settings v7 (v6 blobs → defaults; press Reset all to defaults once after flashing); FW_VERSION 2.0.0; serial `mode` / `supply switch` / `power off`. S3 config un-staled (TIME_SAVE_MS was missing since v1.7 — the S3 sketch would not have compiled). Classic pins 13/15/16/18/27/35 repurposed (buzzer, buttons, latch, toggle, opto). Docs: manual 02 §4.11, 03, 05, 09; PARAMETERS; both READMEs; variants README; BOM; QC 17–18; datasheet.

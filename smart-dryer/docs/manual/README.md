@@ -1,4 +1,4 @@
-# Smart DeHummidifier — Full Manual (optional deep-dive docs)
+# Smart Dehumidifier — Full Manual (optional deep-dive docs)
 
 Start here. These files document **everything from scratch**: parts, wiring,
 code, flashing, deployment on solar, every known disadvantage (solved or

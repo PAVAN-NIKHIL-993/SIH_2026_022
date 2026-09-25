@@ -162,7 +162,7 @@ static void drawSplash() {
   drawText(8, 84, BRAND_NAME, 3, C_GOLD, C_NAVY);      // ARCHITECTS OF
   drawText(64, 140, "S O L U T I O N S", 3, C_GOLD, C_NAVY);
   fillRect(60, 184, 360, 2, C_DIM);
-  drawText(96, 204, PRODUCT_NAME, 4, C_WHITE, C_NAVY); // SMART DEHUMMIDIFIER
+  drawText(96, 204, PRODUCT_NAME, 4, C_WHITE, C_NAVY); // SMART DEHUMIDIFIER
   char b[48];
   snprintf(b, sizeof(b), "v%s  -  initialising, outputs LOW", FW_VERSION);
   drawText(84, 262, b, 2, C_DIM, C_NAVY);

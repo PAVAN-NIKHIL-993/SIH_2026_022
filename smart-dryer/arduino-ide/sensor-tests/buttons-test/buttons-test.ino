@@ -1,5 +1,5 @@
 /**
- * BUTTONS TEST - Smart DeHummidifier (sensor suite, v2.0.20)
+ * BUTTONS TEST - Smart Dehumidifier (sensor suite, v2.0.20)
  * ===================================================================
  * Checks BUTTON-1 (master power button) and BUTTON-2 (default
  * automation) with press duration measurement.

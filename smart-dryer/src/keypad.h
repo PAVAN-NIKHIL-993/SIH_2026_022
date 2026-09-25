@@ -1,5 +1,6 @@
 /**
  * @file keypad.h
+ * @brief Optional 16-key hex keypad on a PCF8574 I2C backpack.
  *
  * Wired to the PCF8574: rows on P0-P3, columns on P4-P7. Shares Wire
  * (GPIO21/22) with AHT10 #1 - the PCF8574 answers at 0x20..0x26, the
@@ -47,5 +48,4 @@ public:
 
 extern I2CKeypad keypad;
 
-#endif
 #endif

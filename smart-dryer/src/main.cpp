@@ -1,6 +1,6 @@
 /**
  * @file main.cpp
- * @brief Smart DeHummidifier - application entry point.
+ * @brief Smart Dehumidifier - application entry point.
  *
  * Two build modes (config.h: DRYER_RTOS):
  *   0 = cooperative loop (default) - one loop() calls every module,
@@ -54,7 +54,7 @@
 
 static void printBanner() {
   Serial.println(F("\n========================================="));
-  Serial.printf("  SMART DEHUMMIDIFIER PILLAR  v%s\n", FW_VERSION);
+  Serial.printf("  SMART DEHUMIDIFIER PILLAR  v%s\n", FW_VERSION);
   Serial.println(F("  550W solar - ESP32 + BTS7960 + L298N"));
   Serial.println(F("========================================="));
 }
@@ -462,7 +462,7 @@ static void initSystem() {
 #endif
 
   // v2.0: INITIALISATION WINDOW - every output stays LOW, the splash
-  // (ARCHITECTS OF SOLUTIONS / SMART DEHUMMIDIFIER) holds, the power-on beeps
+  // (ARCHITECTS OF SOLUTIONS / SMART DEHUMIDIFIER) holds, the power-on beeps
   // play out; the user can read the self-test before anything energises.
   Serial.printf("[init] ALL PINS LOW for %u s - initialisation + calibration\n",
                 (unsigned)(BOOT_INIT_MS / 1000UL));

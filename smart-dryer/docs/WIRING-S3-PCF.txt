@@ -1,5 +1,5 @@
 ============================================================================
- SMART DEHUMMIDIFIER PILLAR - FULL WIRE-BY-WIRE
+ SMART DEHUMIDIFIER PILLAR - FULL WIRE-BY-WIRE
  ESP32-S3 + 2 x PCF8574 + HX711 WEIGH SCALE   (v2.1 build)
  Pin numbers as compiled in firmware v2.0.20: DHT11 = GPIO41,
  door reed = GPIO21 (this header does NOT break out GPIO 22-34).

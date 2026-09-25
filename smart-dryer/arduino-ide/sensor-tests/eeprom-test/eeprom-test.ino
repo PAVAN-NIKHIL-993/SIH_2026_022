@@ -1,5 +1,5 @@
 /**
- * EEPROM TEST - Smart DeHummidifier (sensor suite, v2.0.20)
+ * EEPROM TEST - Smart Dehumidifier (sensor suite, v2.0.20)
  * ===================================================================
  * Checks the AT24C256 32 kB I2C EEPROM that stores the long-term cycle
  * registry (every drying cycle's summary, ~817 slots).

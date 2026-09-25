@@ -1,6 +1,6 @@
 /*
  * ============================================================================
- *  SMART DEHUMMIDIFIER - DISPLAY TEST (UNO only, no S3, nothing else connected)
+ *  SMART DEHUMIDIFIER - DISPLAY TEST (UNO only, no S3, nothing else connected)
  * ============================================================================
  *  Plug the 3.5" parallel shield (D0-D7 + WR + RD pins) onto the Arduino
  *  UNO, USB cable in, upload this. That's the whole setup.
@@ -55,7 +55,7 @@ void bars() {                       // classic 8-colour bar strip
 
 void setup() {
   Serial.begin(9600);
-  Serial.println(F("\n=== SMART DEHUMMIDIFIER DISPLAY TEST ==="));
+  Serial.println(F("\n=== SMART DEHUMIDIFIER DISPLAY TEST ==="));
 
   uint16_t id = tft.readID();
   if (id == 0xD3D3) id = 0x9486;    // common readID() fallback on clones
@@ -71,7 +71,7 @@ void setup() {
   tft.setTextColor(C_GOLD, C_NAVY);
   tft.setTextSize(3);
   tft.setCursor(40, 80);
-  tft.print(F("SMART DEHUMMIDIFIER"));
+  tft.print(F("SMART DEHUMIDIFIER"));
   tft.setTextSize(2);
   tft.setTextColor(C_WHITE, C_NAVY);
   tft.setCursor(40, 120);

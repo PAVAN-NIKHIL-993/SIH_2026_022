@@ -1,6 +1,6 @@
 # FUTURE — the upgrade roadmap
 
-Future-ready plans for the Smart DeHummidifier Pillar. One spec per upgrade, each
+Future-ready plans for the Smart Dehumidifier Pillar. One spec per upgrade, each
 with hardware, firmware touchpoints, UI, effort and risks — so any of them
 can be picked up and built without re-discovery. Specs that need new pins
 reuse the FREE pin pool — S3: **GPIO 3, 11** (40/42/47 = DS1302 RTC

@@ -1,4 +1,4 @@
-# 🌿 SMART DEHUMMIDIFIER PILLAR — Full Documentation
+# 🌿 SMART DEHUMIDIFIER PILLAR — Full Documentation
 
 **A 6-ft solar drying pillar for agarbattis (incense sticks): one 550 W
 panel in, 500 W of heat out, zero fuel, zero internet.** Load the trays,
@@ -82,7 +82,7 @@ POWER-ON ──► 🔒 START LOCKED ──► calibrate scale (known weight) �
 ## 4. Feature list (firmware v2.0)
 
 - **Boot:** all outputs LOW → **10 s initialisation window** with the
-  ARCHITECTS OF SOLUTIONS / SMART DEHUMMIDIFIER splash, power-on beeps and the
+  ARCHITECTS OF SOLUTIONS / SMART DEHUMIDIFIER splash, power-on beeps and the
   full self-test — nothing energises before you've seen it.
 - **Modes:** AGARBATTI (60 °C) / USER DEFINED / SILICAGEL (80 °C) — C key,
   BUTTON-2, website or serial `mode`.
@@ -401,7 +401,7 @@ POWER-ON ──► 🔒 START LOCKED ──► calibrate scale (known weight) �
 ## 4. Feature list (firmware v2.0)
 
 - **Boot:** all outputs LOW → **10 s initialisation window** with the
-  ARCHITECTS OF SOLUTIONS / SMART DEHUMMIDIFIER splash, power-on beeps and the
+  ARCHITECTS OF SOLUTIONS / SMART DEHUMIDIFIER splash, power-on beeps and the
   full self-test — nothing energises before you've seen it.
 - **Modes:** AGARBATTI (60 °C) / USER DEFINED / SILICAGEL (80 °C) — C key,
   BUTTON-2, website or serial `mode`.

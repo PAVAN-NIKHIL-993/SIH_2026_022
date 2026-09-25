@@ -58,7 +58,7 @@ duty% = Kp·e + Σ(Ki·e·1s) + Kd·(Δe/1s)     e = setTemp − tAvg
 Outdoor priority: **fresh forecast (phone) → stale forecast → manual**.
 
 **Boot (v2.0):** all outputs LOW → splash (ARCHITECTS OF SOLUTIONS /
-SMART DEHUMMIDIFIER) + 2/s power-on beeps → self-test → 10 s initialisation
+SMART DEHUMIDIFIER) + 2/s power-on beeps → self-test → 10 s initialisation
 window → main screen. **Supply:** solar ⇄ bypass by toggle, verified by
 the optocoupler, relay switched only with loads quiet (refused under
 load = 5 s error beep). **Fan law (v2.0):** one outlet fan; RH ≥ 60 %

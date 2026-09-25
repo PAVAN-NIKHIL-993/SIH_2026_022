@@ -6,7 +6,7 @@ serial, build date, FW version flashed, QC sheet serial, buyer (later).
 
 ## Unit label (printed, laminated, on the controller bay)
 ```
-SMART DEHUMMIDIFIER PILLAR
+SMART DEHUMIDIFIER PILLAR
 Model SDP-600  ·  Serial PIL-2026-001
 Input: 550 W solar panel  ·  Battery: 12.8 V LiFePO4
 Heater 500 W max  ·  Chamber max 95 °C (rated 100 °C)

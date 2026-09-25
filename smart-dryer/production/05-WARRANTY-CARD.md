@@ -1,6 +1,6 @@
 # Warranty card (template)
 
-**Smart DeHummidifier Pillar** · Serial ________ · Date of sale ________
+**Smart Dehumidifier Pillar** · Serial ________ · Date of sale ________
 
 Covered 12 months from date of sale: controller electronics, fans, coil,
 workmanship. Battery covered 6 months (manufacturing defects only — capacity

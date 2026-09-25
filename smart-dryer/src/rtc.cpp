@@ -70,13 +70,13 @@ static uint8_t bin2bcd(uint8_t v) { return (uint8_t)(((v / 10) << 4) | (v % 10))
 static inline void ceHiLo(bool hi) { digitalWrite(PIN_RTC_RST, hi ? HIGH : LOW); }
 static inline void clkHiLo(bool hi) { digitalWrite(PIN_RTC_SCLK, hi ? HIGH : LOW); }
 
-static void bitWrite(bool b) {
+static void rtcBitWrite(bool b) {
   digitalWrite(PIN_RTC_IO, b ? HIGH : LOW);
   clkHiLo(true);
   clkHiLo(false);
 }
 
-static bool bitRead() {
+static bool rtcBitRead() {
   clkHiLo(true);
   clkHiLo(false);                              // falling edge: chip updates
   return (digitalRead(PIN_RTC_IO) == HIGH);    // bit, valid during the low
@@ -84,27 +84,27 @@ static bool bitRead() {
 
 static void byteWrite(uint8_t v) {
   pinMode(PIN_RTC_IO, OUTPUT);
-  for (int i = 0; i < 8; i++) bitWrite((v >> i) & 1);
+  for (int i = 0; i < 8; i++) rtcBitWrite((v >> i) & 1);
 }
 
 static uint8_t byteRead() {
   pinMode(PIN_RTC_IO, INPUT);
   uint8_t v = 0;
-  for (int i = 0; i < 8; i++) if (bitRead()) v |= (uint8_t)(1u << i);
+  for (int i = 0; i < 8; i++) if (rtcBitRead()) v |= (uint8_t)(1u << i);
   return v;
 }
 
 static void xfer(uint8_t addr, const uint8_t *data, uint8_t n, uint8_t *out) {
   ceHiLo(false);
   ceHiLo(true);                                   // chip select (CE = RST)
-  bitWrite(false);                                // START
+  rtcBitWrite(false);                                // START
   byteWrite(addr);
   if (addr & 0x01) {                              // R/W bit (bit0): 1 = read
     for (uint8_t i = 0; i < n; i++) out[i] = byteRead();
   } else {
     for (uint8_t i = 0; i < n; i++) byteWrite(data[i]);
   }
-  bitWrite(true);                                 // STOP
+  rtcBitWrite(true);                                 // STOP
   ceHiLo(false);
 }
 

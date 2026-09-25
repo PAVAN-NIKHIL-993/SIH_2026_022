@@ -27,7 +27,7 @@ def E(src, dst, label='', dashed=False, color='#595959', via=None):
 
 # ================= PAGE 1 : SYSTEM DESIGN =================
 p1_boxes = [
- B('title', 'SMART DEHUMMIDIFIER PILLAR — FULL SYSTEM DESIGN\nv2.1 max-PCF architecture · one ESP32-S3 does everything', 40, 16, 1000, 46, 'note'),
+ B('title', 'SMART DEHUMIDIFIER PILLAR — FULL SYSTEM DESIGN\nv2.1 max-PCF architecture · one ESP32-S3 does everything', 40, 16, 1000, 46, 'note'),
  # power chain
  B('solar', '550 W SOLAR PANEL\n24 V nominal', 40, 76, 220, 54),
  B('mppt', 'MPPT CONTROLLER\n20 A+ · 12 V side', 292, 76, 220, 54),
@@ -110,7 +110,7 @@ p2_edges = [
 
 # ================= PAGE 3 : CODE WORKFLOW =================
 p3_boxes = [
- B('t1_', 'SMART DEHUMMIDIFIER — CODE WORKFLOW\nfirmware v2.x · zero libraries · every step mapped to its component', 40, 16, 1000, 46, 'note'),
+ B('t1_', 'SMART DEHUMIDIFIER — CODE WORKFLOW\nfirmware v2.x · zero libraries · every step mapped to its component', 40, 16, 1000, 46, 'note'),
  B('boothdr', '① BOOT — setup() → initSystem()', 60, 76, 300, 40, 'purple', bold_first=False),
  B('b1', 'supply::begin — LATCH HOLD GPIO14\nasserted within ms (or power dies)', 60, 130, 300, 50),
  B('b2', 'pinsUnusedSafe — every unused pad\nparked (pull-up / input)', 60, 192, 300, 50),

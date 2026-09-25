@@ -1,4 +1,4 @@
-# 🌿 Smart DeHummidifier — PILLAR
+# 🌿 Smart Dehumidifier — PILLAR
 
 A production-ready ESP32 controller that dries agarbattis (incense sticks) in
 a **pillar-shaped closed chamber** on **100 % solar power**: one **550 W

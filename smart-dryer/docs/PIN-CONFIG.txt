@@ -1,5 +1,5 @@
 ============================================================================
- SMART DEHUMMIDIFIER PILLAR - PIN CONFIGURATION (firmware v2.0.20
+ SMART DEHUMIDIFIER PILLAR - PIN CONFIGURATION (firmware v2.0.20
  - S3 remap in: DHT11 33 -> 41, door 34 -> 21)
 ============================================================================
  Layout: S3 PIN (left)  ->  [PCF pin if the signal goes through an

@@ -1,4 +1,4 @@
-# Components Checklist — Smart DeHummidifier Pillar v2.0
+# Components Checklist — Smart Dehumidifier Pillar v2.0
 
 **Print this, tick the boxes, buy in the phase order below.**
 Full specs + notes: `01-BOM-FULL.csv` · Wiring: manual 02 (§4 = every module) ·

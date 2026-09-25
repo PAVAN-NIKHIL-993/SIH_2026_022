@@ -1,5 +1,5 @@
 /**
- * DOOR SWITCH TEST - Smart DeHummidifier (sensor suite, v2.0.20)
+ * DOOR SWITCH TEST - Smart Dehumidifier (sensor suite, v2.0.20)
  * ===================================================================
  * Checks the door limit switch (open/closed) with edge detection and
  * debounce, the same way the firmware reads it.

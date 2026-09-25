@@ -19,7 +19,7 @@ documents; where they conflict with the build, the owner decides.
 1. Power ON (Button-1 3 s): all pins LOW (safe-start), 10 s init
    (tare, load-cell check, AHT10 test, door read, relay/opto read,
    fan+heater verified LOW), splash "ARCHITECTS OF SOLUTIONS /
-   SMART DEHUMMIDIFIER", then HOME. Power-on beep 2/s × 3 s.
+   SMART DEHUMIDIFIER", then HOME. Power-on beep 2/s × 3 s.
 2. Door open (1 s beep) → load trays → TRAY DETECTION: auto by weight,
    else manual YES/NO per tray (1/2/3). E05 if empty/overload.
 3. Door close (1 s beep) → capture + freeze W_initial (only weighed

@@ -1,5 +1,5 @@
 /**
- * DHT SENSOR TEST - Smart DeHummidifier (sensor suite, v2.0.20)
+ * DHT SENSOR TEST - Smart Dehumidifier (sensor suite, v2.0.20)
  * ===================================================================
  * Checks the DHT sensors with the SAME bit-bang 40-bit-frame decoder
  * the firmware uses (no DHT library needed).
