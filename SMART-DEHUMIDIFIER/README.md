@@ -20,16 +20,16 @@ phone) where you watch every value and set every threshold yourself.
 
 ```
 Solar panel ──> BMS ──> Battery ──> BMS output ──> [ LOAD RELAY ] ──> Heater coil + Fans
+                                  │                     │
+                                  │                     ├──> ESP32 (via 5 V buck)
+                                  │                     └──> opens at end of cycle = power OFF
+                                  └──> divider+transistor ──> ESP32 ADC (battery %)
+                     battery low ──> BYPASS relay ON (bypass supply takes over)
+```
 
-**Platform at a glance**
+## Hardware
 
-| | |
-|---|---|
-| Power class | **550 W solar panel → 500 W pillar heater** (0.32 Ω nichrome, BTS7960 43 A bridge) |
-| Continuous draw | **full 500 W at 100 % duty** — 550 W panel + battery carry the peaks; BTS7960 43 A with heatsink |
-| Chamber | **6–8 ft pillar** (30 × 30 cm section): battery at the base, controller at the top, solar panel external |
-| Temperature | recipes 45–80 °C (AHT10 zone), hard cut **95 °C**, chamber rated to 100 °C |
-| Control | **door-locked calibrate→load→ready workflow** → full-power heat-up → PID hold → **RH-triggered outlet-fan bursts (60 %/1 min → 100 %/60 s)** → target-weight tracking → purge → auto power-off |
+| Block | Part | Role |
 |---|---|---|
 | MCU | ESP32 DevKit V1 (30-pin) | reads sensors, runs control laws + the website |
 | Heater driver | **BTS7960 43 A H-bridge** | PWM-switches the heating-coil current; duty set by a PID that holds chamber temperature at your setpoint |
@@ -49,7 +49,7 @@ Solar panel ──> BMS ──> Battery ──> BMS output ──> [ LOAD RELAY 
 2. **ADC2 pins don't work while WiFi is on.** Battery sense uses GPIO36
    (ADC1), which keeps working in AP mode.
 
-| Power | Solar panel → BMS → battery → BMS out | battery % measured on the ADC through a divider + low-side transistor pull-down |
+## Pin map
 
 | ESP32 pin | Connects to | Notes |
 |---|---|---|
@@ -77,25 +77,6 @@ Solar panel ──> BMS ──> Battery ──> BMS output ──> [ LOAD RELAY 
 
 All grounds common: ESP32 GND = BTS7960 GND = L298N GND = BMS output −.
 
-| 13 | **Buzzer** (KY-012) | v2.0 beep pattern set |
-| 15 | **BUTTON-1** sense | master power: 3 s = hard off, 10 s = reboot |
-| 18 | **BUTTON-2** | default automation (agarbatti preset + start) |
-| 14 | L298N **ENB** | the ONE outlet fan wire (remove the ENB jumper, 10 kΩ ENB→GND) |
-| 5 / 4 | spare | IN3→5V + IN4→GND are tied ON THE MODULE (fixed direction, v2.0.10) |
-| 16 | **P-MOSFET latch hold** | keeps the pillar powered (hard power-off) |
-| 27 | **SOLAR toggle** | requests solar / bypass mode |
-- Remove the ENA/ENB jumpers (ESP32 provides PWM there).
-- `12 V` input from BMS output (through the LOAD RELAY), `5 V` regulator
-  jumper left ON is fine, `GND` common.
-- Fan: ONE 12 V DC outlet fan on OUT3/OUT4 (intake removed in v2.0).
-
-### Battery sense (divider + transistor pull-down)
-
-| 34 | weigh-scale DOUT (classic) | HX711 (S3: CLK=1, DOUT=2) |
-| 34 | door limit switch (S3) — no lock fitted | calibrate→load→ready workflow (software gates) |
-
-All grounds common: ESP32 GND = BTS7960 GND = L298N GND = BMS output −.
-
 ### BTS7960
 - `B+ / B-` → battery + / − (through the LOAD RELAY, with an inline fuse sized for your coil).
 - `M+ / M-` → heating coil.
@@ -112,6 +93,25 @@ All grounds common: ESP32 GND = BTS7960 GND = L298N GND = BMS output −.
 
 ```
 battery(+) ──[100 kΩ]──┬──────> GPIO36 (ADC)
+                       │
+                    [15 kΩ]
+                       │
+GPIO19 ──[1 kΩ]── GATE │  (2N7000 N-MOSFET; source → GND, drain → node above)
+                       ▼
+                      GND
+```
+
+GPIO19 HIGH → divider pulled to GND → ADC reads the battery.
+GPIO19 LOW → divider floats → zero standby drain.
+Scale factor: `(100k+15k)/15k = 7.667` — keeps 16.8 V (4S) at ≈2.19 V,
+inside the ESP32 ADC's usable window. All constants in `src/config.h`
+(`VBAT_DIV_*`, `VBAT_CAL_OFFSET` — trim with a multimeter).
+
+### Power path & bypass
+- **Normal:** panel → BMS → battery → BMS OUT → LOAD RELAY → heater + fans.
+- **Battery low (≤ bypass %, default 20 %):** GPIO2 energises the bypass
+  relay — wire it to switch the load to your bypass source (second panel
+  string / grid PSU). The website shows a **BYPASS** badge.
 - **Battery critical (≤ cutoff %, default 10 %):** safe shutdown — heater
   off, purge, relay opens. Same "power cut" path as the end of a cycle.
 
@@ -156,9 +156,9 @@ The badge on the Outdoor card shows which source is in use
 
 ## Website (http://192.168.4.1)
 
-## Optional: online UI from GitHub Pages + cycle backup to GitHub
-
-The dashboard can be **hosted on GitHub Pages** instead of (or alongside)
+Connect your phone/laptop to the hotspot **`AgarbattiDryer`** (password
+`dryer1234`) — the captive portal opens the page automatically. No internet
+needed, nothing leaves the chamber 😉
 
 Three slides:
 
@@ -182,30 +182,30 @@ to purge hot air → heater + fans stop (relay cuts power too, if fitted). The E
 press *Power On* for the next batch.
 
 **Past cycles (saved in ESP flash):** every finished run is written to its
-  lives only in the browser's localStorage and is sent only to
-  api.github.com — the ESP still never touches the internet.
+own file in the ESP32's LittleFS (`/cycles/cycleYYYYMMDD-HHMMSS.csv`) — it
+survives power loss. The dashboard's **Past cycles** table lists them all
+(start time, duration, status — completed / stopped / fault — and time left
+if it ended early), each with a **⬇ CSV** download of every reading of that
+run. The 40 newest cycles are kept; older ones are auto-deleted
+(`CYCLE_MAX_FILES` in `config.h`). "Clear history" wipes them.
 
-**Editing the website:** change `src/webui.h` (single source of truth), then
-`node tools/online/sync-online.js` regenerates `docs/index.html` (adds the
-bridge layer + GitHub backup) — commit both, push, done.
+**Live date & time:** the ESP32 has no battery-backed clock, so the website
+*takes the initiative* — whenever the dashboard connects (and every 30 min)
+it pushes your phone's date, time and timezone to the ESP automatically.
+You can also set date & time manually under *Custom → Clock*, or change the
+timezone offset there (default +330 min = IST). The header shows the live
+clock; cycle files and history stamps use it.
 
-**The buzzer is not optional** — it is part of the core build (GPIO13 classic / GPIO38 S3)
-and always compiles in.
-
-**Outdoor data priority (for the card + smart venting):**
-`live forecast (phone) → stale forecast → manual entry`.
-The badge on the Outdoor card shows which source is in use
-(**LIVE / MANUAL / STALE**).
-
-## Website (http://192.168.4.1)
-
-Connect your phone/laptop to the hotspot **`AgarbattiDryer`** (password
-`dryer1234`) — the captive portal opens the page automatically. No internet
-needed, nothing leaves the chamber 😉
-
-Three slides:
-
-1. **Dashboard** — pro dark UI with SVG **ring gauges** (temp with target
+**Outdoor weather — no internet on the ESP needed:** the ESP32 never goes
+online. Instead, **your phone's browser acts as the bridge**: while connected
+to the dryer hotspot it still has mobile data, so the dashboard fetches live
+weather (Open-Meteo, free, no API key) and *pushes it into the ESP*. The
+Outdoor card shows temp, RH, rain chance, wind and condition, refreshed
+every 20 min while the page is open. One-time setup: type your town in the
+card (geocoding finds it). No internet at all? Type outdoor temp/RH manually.
+**Outdoor-aware venting** (Custom slide, on by default): when the outside air
+is wetter than the chamber (e.g. rain), venting is paused at circulation
+speed — pulling in wet air would slow drying — and the card says so.
 
 ## Control logic in one page
 
@@ -233,7 +233,7 @@ Three slides:
   *safety cutoff* temp → immediate power cut; battery ≤ cutoff % → power
   cut. Every fault says why on the dashboard.
 
-**End of cycle:** time elapsed (and RH target if required) → fans run 100 %
+## Default thresholds
 
 | Parameter | Default |
 |---|---|
@@ -243,93 +243,6 @@ Three slides:
 | Fan burst trigger | RH ≥ 60 % for 1 min → 100 % for 60 s |
 | Drying time (manual) | 120 min |
 | Purge before power cut | 45 s |
-| Bypass below / cutoff below | 20 % / 10 % |
-**Live date & time:** the ESP32 has no battery-backed clock, so the website
-*takes the initiative* — whenever the dashboard connects (and every 30 min)
-it pushes your phone's date, time and timezone to the ESP automatically.
-You can also set date & time manually under *Custom → Clock*, or change the
-timezone offset there (default +330 min = IST). The header shows the live
-clock; cycle files and history stamps use it.
-
-**Outdoor weather — no internet on the ESP needed:** the ESP32 never goes
-online. Instead, **your phone's browser acts as the bridge**: while connected
-to the dryer hotspot it still has mobile data, so the dashboard fetches live
-weather (Open-Meteo, free, no API key) and *pushes it into the ESP*. The
-Outdoor card shows temp, RH, rain chance, wind and condition, refreshed
-every 20 min while the page is open. One-time setup: type your town in the
-card (geocoding finds it). No internet at all? Type outdoor temp/RH manually.
-**Outdoor-aware venting** (Custom slide, on by default): when the outside air
-is wetter than the chamber (e.g. rain), venting is paused at circulation
-speed — pulling in wet air would slow drying — and the card says so.
-
-
-```
-SMART-DEHUMIDIFIER/
-├── arduino-ide/…                               ← THE FIRMWARE (zero libraries)
-│     SMART-DEHUMIDIFIER-single-file.ino                  classic ESP32 DevKit V1
-│     SMART-DEHUMIDIFIER-s3-single-file.ino               ESP32-S3 variant (recommended)
-├── variants/esp32-s3/                          S3 pin map + config + why-S3 README
-├── src/ + platformio.ini                       shared logic, PlatformIO layout
-│     config.h (all pins/defaults) · main.cpp · control · sensors · aht10 ×2
-│     battery · pwm · buzzer · cyclelog · web · webui (PROGMEM website)
-├── docs/
-│   ├── datasheet.md        product spec: power story, temp zones, safety chain
-│   ├── PARAMETERS.md       EVERY parameter: range, default, effect, caution
-│   ├── wiring-diagram.svg
-│   ├── manual/00–10        the full story: parts, build, architecture,
-│   │                       commissioning, fixes, limitations, RTOS, flashing,
-│   │                       every-inch build (10)
-│   └── index.html          online UI (GitHub Pages via the CI workflow)
-├── future/                 future-ready plans: roadmap + one spec per upgrade
-├── production/             build-to-sell: BOM · assembly sign-off · QC ·
-│                           serials & labels · warranty card
-├── demo/                   10-minute demo script + one-pager
-├── compliance/             safety checklist · standards roadmap
-├── media/                  concept render + photo shot-list
-├── tools/                  single-file assembler · online-UI sync ·
-│                           string/printf verifiers · UI test suites (jsdom)
-├── scripts/check-all.sh    one-command release gate (same as CI)
-├── .github/workflows/      CI (scans+tests+sync) · Pages deploy
-├── CHANGELOG.md            release history
-└── ADVANCED-IDEAS.txt      the original idea vault
-```
-
-## Full manual (optional deep-dive docs)
-
-`docs/manual/` — the complete build story in 7 files:
-[01 Parts & tools](docs/manual/01-PARTS-AND-TOOLS.md) ·
-[02 Build step by step](docs/manual/02-BUILD-STEP-BY-STEP.md) ·
-[03 Software architecture](docs/manual/03-SOFTWARE-ARCHITECTURE.md) ·
-[04 Deployment & commissioning](docs/manual/04-DEPLOYMENT-AND-COMMISSIONING.md) ·
-[05 Errors & fixes](docs/manual/05-ERRORS-AND-FIXES.md) ·
-[06 Limitations solved & unsolved](docs/manual/06-LIMITATIONS-SOLVED-AND-UNSOLVED.md) ·
-[07 What's left & the reach](docs/manual/07-WHATS-LEFT-AND-THE-REACH.md)
-
-## Advanced ideas vault
-
-`ADVANCED-IDEAS.txt` — 40+ upgrade ideas at every level (sensors, control
-brain, solar power, data science, website, connectivity, mechanical,
-quality-AI), each rated by difficulty with hooks into this codebase: load
-cells that dry-to-weight, aroma protection via a VOC "nose",
-solar-following heat, QR-coded batches, a digital twin, and more.
-
-## Tuning tips
-
-- Temperature overshoots → lower Kp, raise Kd slightly.
-- **Safety:** RH/temp sensor both dead >15 s → power cut; any sensor over
-  *safety cutoff* temp → immediate power cut; battery ≤ cutoff % → power
-  cut. Every fault says why on the dashboard.
-
-## Default thresholds
-
-| Parameter | Default |
-## Safety notes
-
-- Fuse the heater circuit at the battery, sized for your coil.
-- The 95 °C hard cutoff is a *software* backstop — also fit a bimetal
-  thermostat on the chamber for independent protection.
-- Never run the coil without fans enabled at high duty — the purge sequence
-  handles cool-down; don't bypass it.
 | Bypass below / cutoff below | 20 % / 10 % |
 | Heater PID Kp/Ki/Kd | 10 / 0.2 / 5 |
 

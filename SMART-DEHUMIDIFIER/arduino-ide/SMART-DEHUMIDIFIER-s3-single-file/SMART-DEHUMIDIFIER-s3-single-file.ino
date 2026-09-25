@@ -474,6 +474,7 @@
 #define DEF_KP           10.0f   // heater PID (duty-% per deg C)
 #define DEF_KI           0.2f    // duty-% per (deg C * s)
 #define DEF_KD           5.0f    // duty-% per (deg C / s)
+
 /* ==========================  src/pwm.h  ========================== */
 /**
  * @file pwm.h
@@ -485,6 +486,7 @@
 
 void pwmInitPin(int pin, uint32_t freqHz, uint8_t resBits);
 void pwmWritePin(int pin, uint32_t duty);   // 0 .. (2^resBits - 1)
+
 /* ==========================  src/aht10.h  ========================== */
 /**
  * @file aht10.h
@@ -532,6 +534,7 @@ private:
   uint8_t  _readTries = 0;
   float    _t = NAN, _h = NAN;
 };
+
 /* ==========================  src/dht.h  ========================== */
 /**
  * @file dht.h
@@ -569,6 +572,7 @@ namespace dht {
   void begin();                  // pins up + boot log
   void update();                 // both devices
 }
+
 /* ==========================  src/sensors.h  ========================== */
 /**
  * @file sensors.h
@@ -673,6 +677,7 @@ private:
   bool  _valid = false;
   uint32_t _last = 0;
 };
+
 /* ==========================  src/buzzer.h  ========================== */
 /**
  * @file buzzer.h
@@ -765,63 +770,7 @@ public:
 extern Buzzer buzzer;
 
 #endif
-  POWER_ON, CYCLE_START, CYCLE_DONE, ERROR, DOOR, MODE_CHANGE
-};
 
-namespace bz {
-  void play(BP p);                        // one-shot
-  void startRepeat(BP p, uint32_t periodMs);
-  void stopRepeat(BP p);
-  void stopAllRepeats();
-  bool repeating(BP p);
-  // classic v2.0 API (kept - old call sites)
-  void powerOn(); void cycleStart(); void cycleDone(); void error();
-  void door(); void modeChange();
-}
-
-#if BUZZER_ENABLED
-
-class Buzzer {
-public:
-  void begin();
-  void update();                       // call from loop()
-  bool busy() const { return _p != BP::NONE; }
-  // engine (used by bz::)
-  void playPat(BP p);
-  void addRepeat(BP p, uint32_t periodMs);
-  void delRepeat(BP p);
-  void stopAll();
-  bool repeating(BP p);
-  void pump();                         // re-fire due repeats
-private:
-  void drive(bool on);
-  BP        _p = BP::NONE;             // playing pattern
-  uint8_t   _seg = 0, _repLeft = 0;
-  uint32_t  _tEdge = 0;
-  bool      _on = false;
-  struct R { BP p; uint32_t period; uint32_t last; } _r[4] = {};
-};
-
-extern Buzzer buzzer;
-
-#else
-
-class Buzzer {
-public:
-  void begin() {}
-  void update() {}
-  bool busy() const { return false; }
-  void playPat(BP) {}
-  void addRepeat(BP, uint32_t) {}
-  void delRepeat(BP) {}
-  void stopAll() {}
-  bool repeating(BP) { return false; }
-  void pump() {}
-};
-
-extern Buzzer buzzer;
-
-#endif
 /* ==========================  src/eelog.h  ========================== */
 /**
  * @file eelog.h
@@ -890,6 +839,7 @@ inline void clear()                {}
 #endif
 
 }  // namespace eelog
+
 /* ==========================  src/rtc.h  ========================== */
 /**
  * @file rtc.h
@@ -926,6 +876,7 @@ bool  readTime(time_t *outEp);  // true = chip running with a sane time
 void  writeNow();               // system clock -> chip (no-op if absent)
 const char *statusText();       // short one-liner for serial/console
 }
+
 /* ==========================  src/keypad.h  ========================== */
 /**
  * @file keypad.h
@@ -1044,6 +995,7 @@ public:
 extern LoadScale scale;
 
 #endif
+
 /* ==========================  src/door.h  ========================== */
 /**
  * @file door.h
@@ -1083,6 +1035,7 @@ namespace door {
   float batchG();               // measured batch weight, 0 until measured
   const char *phase();          // CALIBRATE / LOAD / READY / RUNNING
 }
+
 /* ==========================  src/supply.h  ========================== */
 /**
  * @file supply.h
@@ -1120,6 +1073,7 @@ namespace supply {
   void powerOff();           // safe-stop then drop the latch (hard off)
   void requestSwitch();      // follow the toggle now if safe (serial too)
 }
+
 /* ==========================  src/menu.h  ========================== */
 /**
  * @file menu.h
@@ -1146,6 +1100,7 @@ namespace menu {
   const char *editBuffer();           // digits typed so far
   const char *editHint();             // unit / range hint
 }
+
 /* ==========================  src/txdisp.h  ========================== */
 /**
  * @file txdisp.h
@@ -1176,6 +1131,7 @@ namespace txdisp {
   void begin();     // UART up on PIN_TXDISP_TX at TXDISP_BAUD
   void update();    // 1 Hz gated: one $-packet burst (call from loop)
 }
+
 /* ==========================  src/display.h  ========================== */
 /**
  * @file display.h
@@ -1202,6 +1158,7 @@ namespace display {
   inline void splash(bool) {}
 }
 #endif
+
 /* ==========================  src/pixel.h  ========================== */
 /**
  * @file pixel.h
@@ -1232,6 +1189,7 @@ namespace pixel {
   void update();     // call ~10 Hz from loop: state -> colour
   bool rePin(int);   // move the pixel to another data pin (48/38) at runtime
 }
+
 /* ==========================  src/control.h  ========================== */
 /**
  * @file control.h
@@ -1249,6 +1207,7 @@ namespace pixel {
  */
 #include <Arduino.h>
 #include <Preferences.h>
+
 enum class DState : uint8_t { IDLE = 0, RUNNING, COOLDOWN, DONE, FAULT };
 const char *stateName(DState s);
 
@@ -1270,12 +1229,12 @@ const char *eName(uint8_t code); // "HEATER OVERHEATING" ...
 struct Settings {
   uint32_t magic;         // 'SDRY'
   uint16_t ver;           // bump when the struct changes
-// on, operator nudged), sev 1 = CRITICAL (cycle halted, power cut,
-// manual reset via Power On). Reserved (needs hardware): E08 door-sensor
-// self-test, E09 blower RPM proof, E10 heater-current sense.
-struct FaultRec {
-  uint8_t  code = 0;             // 0 = none; 1..20 = E01..E20
-  uint8_t  sev  = 0;
+  float  setTemp;         // deg C  - heat PID setpoint
+  float  tempHyst;        // deg C  - smoothing band shown in UI
+  float  maxTemp;         // deg C  - HARD safety cut
+  float  humLow;          // %RH    - fans stop below
+  float  humHigh;         // %RH    - fans ramp above
+  float  humTarget;       // %RH    - optional completion criterion
   bool   requireHum;      // also wait for humTarget before finishing
   uint32_t dryMinutes;    // manual drying duration
   uint8_t fanMin;         // % circulation speed inside the band
@@ -1285,7 +1244,7 @@ struct FaultRec {
   uint8_t heaterMax;      // % soft cap on coil duty
   uint16_t cooldownSec;   // purge time before the relay opens
   uint8_t bypassPct;      // battery % that engages bypass
-
+  uint8_t cutoffPct;      // battery % that triggers safe shutdown
   uint8_t battType;       // 0=3S Li-ion 1=4S Li-ion 2=12V SLA 3=4S LiFePO4
   int16_t tzMinutes;      // local UTC offset in minutes (330 = IST)
   bool   smartVent;       // pause venting when outside RH >= chamber RH
@@ -1313,85 +1272,18 @@ struct FaultRec {
 };
 
 Settings defaultSettings();
-  float  humHigh;         // %RH    - fans ramp above
-  float  humTarget;       // %RH    - optional completion criterion
-  bool   requireHum;      // also wait for humTarget before finishing
-  uint32_t dryMinutes;    // manual drying duration
-  uint8_t fanMin;         // % circulation speed inside the band
-  uint8_t fanIn;          // % intake fan scaling of the computed duty
-  uint8_t fanOut;         // % exhaust fan scaling of the computed duty
-  uint8_t fanSlope;       // % duty added per RH point above humHigh
-  uint8_t heaterMax;      // % soft cap on coil duty
-  uint16_t cooldownSec;   // purge time before the relay opens
+Settings loadSettings();            // NVS if valid, else defaults
+bool     saveSettings(const Settings &s);
+
+// One CSV/datalog record, 16 bytes (fixed point x10 keeps it compact)
+struct LogRec {
+  uint32_t t;        // seconds since cycle start
+  int16_t  tAvg10;   // temp avg   x10
+  int16_t  hAvg10;   // humidity   x10
+  int16_t  hMax10;
+  int16_t  heat;     // %
   int16_t  fan;      // %
   int16_t  vb10;     // battery V  x10
-  int16_t  bat;      // battery %
-  int16_t  wt10;     // batch weight x10 g (INT16_MIN = no scale)
-  int16_t  ot10 = INT16_MIN;   // outdoor temp x10 (DHT11; MIN = none)
-  int16_t  oh10 = INT16_MIN;   // outdoor RH   x10 (DHT11; MIN = none)
-};
-
-// Latest outdoor weather - pushed by the phone's browser (it has mobile
-  float  kp, ki, kd;      // heater PID gains
-  bool   requireWeight;   // dry-to-weight: also wait for weight to settle
-  float  weightRateG;     // g/min - "settled" means |rate| below this
-  uint16_t weightMinY;    // minutes the rate must stay low before ending
-  float  scaleCal;        // HX711 calibration: raw units per gram
-  int32_t scaleOffset;    // HX711 tare offset (raw)
-  float  targetG;         // g   target batch weight (0 = off): within 5 %
-  // ---- v2.0.16: stick & paste calculator (owner spec) ------------------
-  // The moisture is a property of the PASTE, so it lives here as a
-  // recipe parameter. stickCount > 0 -> targetG is COMPUTED:
-  //   target = N x stickWetG x (1 - (pasteWater% - targetMoist%)/100)
-  uint16_t stickCount;    // sticks in the batch (0 = calculator off)
-
-bool weatherFresh();           // received recently enough to trust
-const char *outdoorSrc();      // "sensor" | "live" | "manual" | "stale" | "none"
-bool getOutdoor(float &t, float &h);   // merged outdoor values (phone forecast/manual)
-
-class Dryer {
-public:
-  uint8_t mode;           // 0=AGARBATTI 1=USER DEFINED 2=SILICAGEL
-};
-
-Settings defaultSettings();
-Settings loadSettings();            // NVS if valid, else defaults
-  void powerOn();                    // DONE/FAULT -> IDLE, relay closed again
-  void addMinutes(int m);            // extend/shorten remaining time live
-  void applySettings(const Settings &s);   // from the web UI
-  void faultNow(const char *why);          // external safety stop (door!)
-  void faultNowE(uint8_t ecode, const char *why,
-                 float val = NAN, float limit = NAN);   // E-coded stop
-  void warnE(uint8_t ecode, const char *why,
-             float val = NAN, float limit = NAN);       // E-coded warning
-  const FaultRec &faultRec() const { return _fr; }      // last critical
-  const FaultRec &warnRec()  const { return _wr; }      // last warning
-  bool warnActive() const { return _wr.active && _wr.code != 0; }
-  void clearWarn(uint8_t code);        // condition fixed -> CLEARED + relief
-  bool scaleLost()  const { return _scaleLost; }        // E15 degraded mode
-  void applyMode(uint8_t m);               // 0 agarbatti / 1 user / 2 silica
-  uint8_t mode() const { return _cfg.mode; }
-  float    wtStartG()  const { return _wtStart; }     // weight at start
-  float    finalG()    const { return _finalG; }      // weight at DONE
-  float    moistureG() const                                 // grams removed
-           { return (_wtStart - _finalG); }
-  uint32_t endElapsedS() const { return _endElapsed; } // duration at DONE
-  float    suggestMin() const { return _suggestMin; } // +min to target
-  void setManualHeat(uint8_t pct);   // web knob: exact duty, auto-releases
-
-  DState     state()    const { return _st; }
-  const char*faultWhy() const { return _why; }
-  uint8_t    heatDuty() const { return _heatDuty; }
-  uint8_t    fanDuty()  const { return _fanDuty; }   // the law's demand
-  uint8_t    fanInDuty()  const { return _fanInD; }  // actually applied
-  uint8_t    fanOutDuty() const { return _fanOutD; }
-  bool       boosting()  const { return _boosting; }  // max-power heat-up on
-  bool       manualOn()  const;                       // knob window active
-  uint8_t    manualPct() const { return _manPct; }    // last knob position
-  uint16_t   manualLeftS() const;                     // 0 = back on automatic
-  bool       relayOn()  const { return _relayOn; }
-  uint32_t   elapsedS() const { return _elapsed; }      // RUNNING time
-  uint32_t   remainingS() const;                        // 0 when not running
   int16_t  bat;      // battery %
   int16_t  wt10;     // batch weight x10 g (INT16_MIN = no scale)
   int16_t  ot10 = INT16_MIN;   // outdoor temp x10 (DHT11; MIN = none)
@@ -1406,41 +1298,18 @@ struct Weather {
   float    rainPct = NAN;
   float    windKmh = NAN;
   uint8_t  code    = 100;      // WMO weather code (100 = unknown)
-  Settings   _cfg;
-  DState     _st = DState::IDLE;
-  char       _why[40] = {0};
-  float      _finalG = NAN;               // v2.0.15 completion summary
-  uint32_t   _endElapsed = 0, _doneAt = 0;
-  bool       _spReached = false, _midway = false, _anomWarned = false;
-  float      _lastG = NAN;
-  FaultRec   _fr, _wr;                     // E-code records (v2.0.14)
-  bool       _scaleWasOk = false;          // E15 baseline
-  uint32_t   _scaleLostSince = 0, _voltLowSince = 0,
-             _voltHighSince = 0, _tHighWarnSince = 0;
-  char       _endReason[40] = "completed";   // cycle-history entry reason
-  bool       _scaleLost = false;             // E15: running without the scale
-  bool       _singleWarned = false;          // one chamber sensor left
-  uint32_t   _tStart = 0, _elapsed = 0, _cdStart = 0;
-  uint8_t    _heatDuty = 0, _fanDuty = 0, _fanInD = 0, _fanOutD = 0;
-  // v2.0 fan bursts + watchdogs + target weight
-  uint32_t   _trigSince = 0;      // RH above the trigger since (burst timer)
-  uint32_t   _fanBurstUntil = 0;  // fan 100 % until this millis
-  uint32_t   _rhErrSince = 0;     // RH above humHigh since (fan error 5 min)
-  uint32_t   _flatSince = 0;      // heater-failure: heat-up flatline since
-  float      _flatT0 = NAN;       // temperature when the flatline started
-  float      _wtStart = NAN;      // batch weight captured at start
-  float      _suggestMin = -1;    // suggested extra minutes to target
-  bool       _tWarned = false;    // T-5-min target warning fired
-  bool       _relayOn = false;
-  float      _integ = 0, _lastE = 0;
-  bool       _boosting = false;
-  uint32_t   _manUntil = 0;          // millis() deadline of the knob window
-  uint8_t    _manPct = 0;            // knob duty the user asked for
-  uint32_t   _sensFailSince = 0;
-  uint32_t   _wtGoodSince = 0;      // weight-settle window start
-  uint32_t   _lastTick = 0, _lastLog = 0;
+  char     loc[24] = "";
+  uint32_t epoch   = 0;        // when the phone sampled it
+  uint32_t rxMs    = 0;        // when the ESP received it
+  bool     manual  = false;    // typed by hand vs live fetch
+};
 
-  static LogRec _log[LOG_MAX];
+bool weatherFresh();           // received recently enough to trust
+const char *outdoorSrc();      // "sensor" | "live" | "manual" | "stale" | "none"
+bool getOutdoor(float &t, float &h);   // merged outdoor values (phone forecast/manual)
+
+class Dryer {
+public:
   void begin(const Settings &s);
   void tick();                       // call from loop() - 1 s control cadence
 
@@ -1507,7 +1376,7 @@ private:
   bool       _scaleWasOk = false;          // E15 baseline
   uint32_t   _scaleLostSince = 0, _voltLowSince = 0,
              _voltHighSince = 0, _tHighWarnSince = 0;
-  char       _endReason[32] = "completed";   // cycle-history entry reason
+  char       _endReason[40] = "completed";   // cycle-history entry reason
   bool       _scaleLost = false;             // E15: running without the scale
   bool       _singleWarned = false;          // one chamber sensor left
   uint32_t   _tStart = 0, _elapsed = 0, _cdStart = 0;
@@ -1539,6 +1408,7 @@ extern BatteryMonitor  battery;
 extern Dryer           dryer;
 extern Settings        cfg;
 extern Weather         weather;
+
 /* ==========================  src/cyclelog.h  ========================== */
 /**
  * @file cyclelog.h
@@ -1552,6 +1422,7 @@ extern Weather         weather;
 #include <Arduino.h>
 
 namespace cyclelog {
+
 void begin();                            // mount FS, restore counter, prune
 void start();                            // called by Dryer::start()
 void finish(const char *reason, const char *note);   // write + prune
@@ -1560,7 +1431,7 @@ String lastFile();               // newest cycle CSV name ("" = none yet)       
 
 String listingJson();                    // /api/cycles payload
 String safePath(const String &name);     // "" if invalid, else "/cycles/<name>"
-String listingJson();                    // /api/cycles payload
+
 /** Apply cfg.tzMinutes to libc (file names / header stamps use it). */
 void applyTz();
 
@@ -1569,10 +1440,6 @@ uint16_t fileCount();        // stored cycles (storage-full warning #30)
 
 } // namespace cyclelog
 
-uint32_t cycleNo();          // NVS cycle counter (maintenance nag #33)
-uint16_t fileCount();        // stored cycles (storage-full warning #30)
-
-} // namespace cyclelog
 /* ==========================  src/webui.h  ========================== */
 /**
  * @file webui.h
@@ -2950,6 +2817,7 @@ setInterval(tick,1000);tick();
  */
 #include <WebServer.h>
 #include <DNSServer.h>
+
 namespace web {
   void begin();
   void handle();
@@ -2957,10 +2825,7 @@ namespace web {
   void clockSetManual(time_t ep);   // keypad menu / manual set: set + persist
   void clockTick();     // persist the clock every TIME_SAVE_MS (call in loop)
 }
-  void clockBoot();     // restore last-saved wall clock after full power-down
-  void clockSetManual(time_t ep);   // keypad menu / manual set: set + persist
-  void clockTick();     // persist the clock every TIME_SAVE_MS (call in loop)
-}
+
 /* ==========================  src/pwm.cpp  ========================== */
 
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
@@ -2997,6 +2862,7 @@ void pwmWritePin(int pin, uint32_t duty) {
   if (ch >= 0) ledcWrite(ch, duty);
 }
 #endif
+
 /* ==========================  src/aht10.cpp  ========================== */
 
 // AHT10 command set (see Aosong datasheet)
@@ -3111,6 +2977,7 @@ bool AHT10::readResult() {
   _t = t;
   return true;
 }
+
 /* ==========================  src/sensors.cpp  ========================== */
 
 bool SensorModule::begin() {
@@ -3152,22 +3019,12 @@ void SensorModule::recompute() {
   }
   if (n > 0) {
     _tAvg = tSum / n; _hAvg = hSum / n;
-  float tM = -300, hM = -300;
-  if (s1ok()) {
-    tSum += t1(); hSum += h1(); n++;
-    tM = max(tM, t1()); hM = max(hM, h1());
-  }
-  if (s2ok()) {
-    tSum += t2(); hSum += h2(); n++;
-    tM = max(tM, t2()); hM = max(hM, h2());
-  }
-  if (n > 0) {
-    _tAvg = tSum / n; _hAvg = hSum / n;
     _tMax = tM;       _hMax = hM;
   } else {
     _tAvg = NAN; _hAvg = NAN; _tMax = NAN; _hMax = NAN;
   }
 }
+
 /* ==========================  src/battery.cpp  ========================== */
 
 // Resting-voltage approximations - good enough for a dryer dashboard.
@@ -3292,19 +3149,19 @@ static const Pat P[] = {
 #if BUZZER_ENABLED
 
 Buzzer buzzer;
-struct Pat {
-  uint8_t  n;                 // segment count
-  uint16_t on[6];
-  uint16_t off[6];
-  uint8_t  prio;              // higher preempts
-};
 
-static const Pat P[] = {
-  /*NONE*/        {0, {0,0,0,0,0,0}, {0,0,0,0,0,0}, 0},
-  /*KEY*/         {1, {50,0,0,0,0,0},          {0,0,0,0,0,0},            1}, // #1
-  /*INVALID*/     {2, {80,80,0,0,0,0},         {100,0,0,0,0,0},          2}, // #2
-  /*TICK*/        {1, {50,0,0,0,0,0},          {0,0,0,0,0,0},            4}, // #3
-  /*MODE*/        {1, {100,0,0,0,0,0},         {0,0,0,0,0,0},            2}, // #4
+void Buzzer::drive(bool on) {
+#if BUZZER_ACTIVE_HIGH
+  digitalWrite(PIN_BUZZER, on ? HIGH : LOW);
+#else
+  digitalWrite(PIN_BUZZER, on ? LOW : HIGH);
+#endif
+}
+
+void Buzzer::begin() {
+  pinMode(PIN_BUZZER, OUTPUT);
+  drive(false);
+}
 
 void Buzzer::beep(uint8_t n, uint16_t onMs, uint16_t offMs) {
   if (n == 0) return;
@@ -3409,113 +3266,7 @@ namespace bz {
   void door()       { play(BP::DOOR); }
   void modeChange() { play(BP::MODE_CHANGE); }
 }
-  /*COOL_DONE*/   {1, {200,0,0,0,0,0},         {0,0,0,0,0,0},            2}, // #35
-  /*SHUTDOWN*/    {1, {1000,0,0,0,0,0},        {0,0,0,0,0,0},            9}, // #36
-  /*FACT_RESET*/  {4, {1500,100,100,100,0,0},  {200,100,100,0,0,0},      9}, // #37
-  /*POWER_ON*/    {6, {250,250,250,250,250,250},{250,250,250,250,250,0}, 4},
-  /*CYCLE_START*/ {1, {3000,0,0,0,0,0},        {0,0,0,0,0,0},            9},
-  /*CYCLE_DONE*/  {1, {5000,0,0,0,0,0},        {0,0,0,0,0,0},            9},
-  /*ERROR*/       {1, {5000,0,0,0,0,0},        {0,0,0,0,0,0},           10},
-  /*DOOR*/        {1, {1000,0,0,0,0,0},        {0,0,0,0,0,0},            5},
-  /*MODE_CHANGE*/ {1, {3000,0,0,0,0,0},        {0,0,0,0,0,0},            8},
-};
 
-#if BUZZER_ENABLED
-
-Buzzer buzzer;
-
-void Buzzer::drive(bool on) {
-#if BUZZER_ACTIVE_HIGH
-  digitalWrite(PIN_BUZZER, on ? HIGH : LOW);
-#else
-  digitalWrite(PIN_BUZZER, on ? LOW : HIGH);
-#endif
-}
-
-void Buzzer::begin() {
-  pinMode(PIN_BUZZER, OUTPUT);
-  drive(false);
-}
-
-void Buzzer::playPat(BP p) {
-  const Pat &pat = P[(uint8_t)p];
-  if (pat.n == 0) return;
-  if (_p != BP::NONE && P[(uint8_t)_p].prio > pat.prio) return; // quieter wins
-  _p = p; _seg = 0; _on = true; _tEdge = millis();
-  drive(true);
-}
-
-void Buzzer::addRepeat(BP p, uint32_t periodMs) {
-  for (auto &r : _r)
-    if (r.p == p) { r.period = periodMs; return; }        // already on
-  for (auto &r : _r)
-    if (r.p == BP::NONE) { r.p = p; r.period = periodMs; r.last = millis(); return; }
-  uint8_t low = 0;                                        // table full:
-  for (uint8_t i = 1; i < 4; i++)                         // drop the quietest
-    if (P[(uint8_t)_r[i].p].prio < P[(uint8_t)_r[low].p].prio) low = i;
-  _r[low] = {p, periodMs, millis()};
-}
-
-void Buzzer::delRepeat(BP p) {
-  for (auto &r : _r) if (r.p == p) r.p = BP::NONE;
-}
-
-void Buzzer::stopAll() {
-  for (auto &r : _r) r.p = BP::NONE;
-}
-
-bool Buzzer::repeating(BP p) {
-  for (auto &r : _r) if (r.p == p) return true;
-  return false;
-}
-
-void Buzzer::pump() {
-  if (_p != BP::NONE) return;                             // busy
-  R *best = nullptr;
-  uint32_t now = millis();
-  for (auto &r : _r) {
-    if (r.p == BP::NONE || now - r.last < r.period) continue;
-    if (!best || P[(uint8_t)r.p].prio > P[(uint8_t)best->p].prio) best = &r;
-  }
-  if (best) { best->last = now; playPat(best->p); }
-}
-
-void Buzzer::update() {
-  pump();
-  if (_p == BP::NONE) return;
-  const Pat &pat = P[(uint8_t)_p];
-  uint32_t now = millis();
-  uint16_t phase = _on ? pat.on[_seg] : pat.off[_seg];
-  if (now - _tEdge >= phase) {
-    if (_on) {
-      drive(false); _on = false; _tEdge = now;
-      if (pat.off[_seg] == 0) _p = BP::NONE;   // last segment ends pattern
-    } else {
-      if (_seg + 1 < pat.n) { _seg++; _on = true; _tEdge = now; drive(true); }
-      else _p = BP::NONE;
-    }
-  }
-}
-
-#else
-Buzzer buzzer;                                  // stub class from header
-#endif
-
-// ---- public API --------------------------------------------------------
-namespace bz {
-  void play(BP p)                { buzzer.playPat(p); }
-  void startRepeat(BP p, uint32_t periodMs) { buzzer.addRepeat(p, periodMs); }
-  void stopRepeat(BP p)          { buzzer.delRepeat(p); }
-  void stopAllRepeats()          { buzzer.stopAll(); }
-  bool repeating(BP p)           { return buzzer.repeating(p); }
-  // classic law
-  void powerOn()    { play(BP::POWER_ON); }
-  void cycleStart() { play(BP::CYCLE_START); }
-  void cycleDone()  { play(BP::CYCLE_DONE); }
-  void error()      { play(BP::ERROR); }
-  void door()       { play(BP::DOOR); }
-  void modeChange() { play(BP::MODE_CHANGE); }
-}
 /* ==========================  src/eelog.cpp  ========================== */
 
 #if ELOG_ENABLED
@@ -3697,6 +3448,7 @@ void clear() {
 }  // namespace eelog
 
 #endif
+
 /* ==========================  src/rtc.cpp  ========================== */
 /**
  * @file rtc.cpp
@@ -3918,6 +3670,7 @@ const char *statusText() {
 }  // namespace rtc
 
 #endif  // RTC_ENABLED
+
 /* ==========================  src/keypad.cpp  ========================== */
 
 #if KEYPAD_ENABLED
@@ -4342,6 +4095,7 @@ void update() {
 #else
 // DISPLAY_ENABLED 0: nothing to build
 #endif
+
 /* ==========================  src/scale.cpp  ========================== */
 
 #if SCALE_ENABLED
@@ -4442,6 +4196,7 @@ void LoadScale::calibrate(float knownGrams) {
 LoadScale scale;      // stub instance (methods are inline no-ops)
 
 #endif
+
 /* ==========================  src/door.cpp  ========================== */
 #include <Preferences.h>
 
@@ -4616,6 +4371,7 @@ void update() {
 }
 
 }  // namespace door
+
 /* ==========================  src/supply.cpp  ========================== */
 
 namespace supply {
@@ -4791,6 +4547,7 @@ void update() {
 }
 
 }  // namespace supply
+
 /* ==========================  src/menu.cpp  ========================== */
 #include <time.h>
 
@@ -4984,6 +4741,7 @@ bool key(char k) {
 }
 
 }  // namespace menu
+
 /* ==========================  src/txdisp.cpp  ========================== */
 
 #if TXDISP_ENABLED
@@ -5038,6 +4796,7 @@ void update() {}
 }
 
 #endif
+
 /* ==========================  src/dht.cpp  ========================== */
 
 namespace dht {
@@ -5128,6 +4887,7 @@ void begin() {
 void update() { chamber.update(); outdoor.update(); }
 
 }  // namespace dht
+
 /* ==========================  src/pixel.cpp  ========================== */
 
 #if PIXEL_ENABLED
@@ -5226,6 +4986,7 @@ bool rePin(int) { return false; }
 }
 
 #endif
+
 /* ==========================  src/control.cpp  ========================== */
 
 // ---------------------------------------------------------------------
@@ -6100,17 +5861,14 @@ void Dryer::tick() {
 #include <LittleFS.h>
 #include <Preferences.h>
 #include <sys/time.h>
+#include <vector>
 #include <algorithm>
 
 namespace cyclelog {
 
+static uint32_t s_counter = 1;
 static bool     s_active  = false;
 static time_t   s_startE  = 0;
-static char     s_startStr[24] = "";
-static float    s_vbStart = NAN;         // battery at cycle start
-
-// --------------------------------------------------------------- time
-void applyTz() {
 static char     s_startStr[24] = "";
 static float    s_vbStart = NAN;         // battery at cycle start
 
@@ -6157,6 +5915,11 @@ static void prune() {
   size_t excess = files.size() - CYCLE_MAX_FILES;
   for (size_t i = 0; i < excess; i++)
     LittleFS.remove(String(CYCLE_DIR) + "/" + files[i]);
+}
+
+void begin() {
+  LittleFS.begin(true);                           // format on very first boot
+  LittleFS.mkdir(CYCLE_DIR);
   Preferences p;
   p.begin("dryer", true);
   s_counter = p.getUInt("cycn", 1);
@@ -6193,7 +5956,7 @@ static void prune() {
   prune();
 }
 
-  // a cycle that started but never finished = power loss mid-run.
+// --------------------------------------------------------------- cycle
 void start() {
   s_active   = true;
   s_startE   = time(nullptr);
@@ -6204,29 +5967,29 @@ void start() {
 }
 
 static String sanitize(const char *s) {           // keep CSV header lines clean
-    snprintf(fn, sizeof(fn), "%s/cycle%s-INT.csv", CYCLE_DIR, stamp);
-    File f = LittleFS.open(fn, FILE_WRITE);
-    if (f) {
-      f.print(F("sec,temp_avg_C,hum_avg_RH,hum_peak_RH,heat_pct,fan_pct,"
-                "batt_V,batt_pct,wt_g,out_t_C,out_rh_RH\r\n"));
-      f.print(F("# INTERRUPTED by power loss (no data rows were kept)\r\n"));
-      f.close();
-      char ws[24]; fmtLocal((time_t)st, ws, sizeof(ws));
-      Serial.printf("[warn] the cycle started at %s was INTERRUPTED by a "
-                    "power loss - marked in the history\n", ws);
-      bz::play(BP::BROWNOUT_RET);      // #21: "the cycle was interrupted"
-      if (eelog::ok()) {               // registry row: endR = 4 interrupted
-        eelog::EeRec r = {};
-        r.startEpoch = st;  r.mode = (uint8_t)cfg.mode;
-        r.endR = 4;  r.flags = 0x02;
-        eelog::append(r);
-      }
-    }
-    Preferences q; q.begin("dryer", false); q.remove("cycStart"); q.end();
-  }
-  applyTz();
-  eelog::begin();                     // AT24C256 cycle registry (v2.0.17)
-  prune();
+  String o(s ? s : "");
+  o.replace(',', ';');
+  o.replace('\n', ' ');
+  o.replace('\r', ' ');
+  return o;
+}
+
+void finish(const char *reason, const char *note) {
+  if (!s_active) return;
+  s_active = false;
+
+  time_t endE = time(nullptr);
+  char endStr[24];
+  fmtLocal(endE, endStr, sizeof(endStr));
+
+  uint32_t elapsedS = dryer.elapsedS();
+  uint32_t totalS   = cfg.dryMinutes * 60UL;
+  float elapsedMin  = elapsedS / 60.0f;
+  float remainMin   = (elapsedS >= totalS) ? 0.0f : (totalS - elapsedS) / 60.0f;
+
+  char fname[48];
+  if (clockSet()) {
+    struct tm tmv;
     localtime_r(&s_startE, &tmv);
     char stamp[24];
     strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", &tmv);
@@ -6235,106 +5998,6 @@ static String sanitize(const char *s) {           // keep CSV header lines clean
     snprintf(fname, sizeof(fname), "cycle-%010u.csv", (unsigned)s_counter);
   }
 
-  File f = LittleFS.open(String(CYCLE_DIR) + "/" + fname, "w");
-  p.putUInt("cycStart", (uint32_t)s_startE); p.end();
-}
-
-static String sanitize(const char *s) {           // keep CSV header lines clean
-  f.printf("# ended,%s\n",     endStr);
-  f.printf("# reason,%s\n",    sanitize(reason).c_str());
-  f.printf("# setTemp,%.1f\n", cfg.setTemp);
-  f.printf("# mode,%s\n", cfg.mode == 0 ? "AGARBATTI" :
-                          cfg.mode == 2 ? "SILICAGEL" : "USER");
-  if (cfg.targetG > 0) f.printf("# targetG,%.0f\n", cfg.targetG);
-  if (!isnan(dryer.wtStartG())) f.printf("# wtStartG,%.0f\n", dryer.wtStartG());
-  f.printf("# dryMinutes,%u\n",(unsigned)cfg.dryMinutes);
-  f.printf("# elapsedMin,%.1f\n", elapsedMin);
-  f.printf("# remainMin,%.1f\n",  remainMin);
-  if (noteS.length()) f.printf("# note,%s\n", noteS.c_str());
-  f.print(F("sec,temp_avg_C,hum_avg_RH,hum_peak_RH,heat_pct,fan_pct,batt_V,batt_pct,wt_g,out_t_C,out_rh_RH\r\n"));
-
-  uint16_t n = dryer.logCount();
-  for (uint16_t i = 0; i < n; i++) {
-    const LogRec &r = dryer.logAt(i);
-    if (r.wt10 == INT16_MIN)
-      f.printf("%u,%.1f,%.1f,%.1f,%d,%d,%.1f,%d,\r\n",
-               (unsigned)r.t, r.tAvg10 / 10.0f, r.hAvg10 / 10.0f, r.hMax10 / 10.0f,
-               (int)r.heat, (int)r.fan, r.vb10 / 10.0f, (int)r.bat);
-    else
-      f.printf("%u,%.1f,%.1f,%.1f,%d,%d,%.1f,%d,%.0f",
-               (unsigned)r.t, r.tAvg10 / 10.0f, r.hAvg10 / 10.0f, r.hMax10 / 10.0f,
-               (int)r.heat, (int)r.fan, r.vb10 / 10.0f, (int)r.bat, r.wt10 / 10.0f);
-    if (r.ot10 == INT16_MIN) f.print(",");
-    else                     f.printf(",%.1f", r.ot10 / 10.0f);
-    if (r.oh10 == INT16_MIN) f.print(",");
-    else                     f.printf(",%.1f", r.oh10 / 10.0f);
-    f.print("\r\n");
-    if ((i & 0x3F) == 0) yield();
-  }
-  f.close();
-  float remainMin   = (elapsedS >= totalS) ? 0.0f : (totalS - elapsedS) / 60.0f;
-  Preferences p;
-  p.begin("dryer", false);
-  p.putUInt("cycn", ++s_counter);
-  p.remove("cycStart");                           // cycle finished cleanly
-  p.end();
-  bz::play(BP::LOG_SAVED);                        // #29: log write OK
-
-  // ---- AT24C256 long-term registry: one 40-byte summary per cycle -----
-  if (eelog::ok()) {
-    eelog::EeRec r = {};
-    r.startEpoch = (uint32_t)s_startE;
-    r.durS = elapsedS;
-    r.mode = (uint8_t)cfg.mode;
-    const char *rsn = reason ? reason : "";
-    r.endR = (strncmp(rsn, "stopped", 7) == 0) ? 1 :
-             (strncmp(rsn, "fault", 5) == 0)  ? 2 :
-             (strncmp(rsn, "E19", 3) == 0)    ? 3 : 0;
-    r.ecode = dryer.faultRec().code;
-    r.setT10 = (int16_t)(cfg.setTemp * 10);
-    if (strstr(rsn, "completed")) r.flags |= 0x04;
-    if (dryer.scaleLost())        r.flags |= 0x01;
-    float tSum = 0, tMax = -300, hMax = -300, oSum = 0; int tn = 0, on = 0;
-    uint16_t nL = dryer.logCount();
-    for (uint16_t i = 0; i < nL; i++) {
-      const LogRec &L2 = dryer.logAt(i);
-      if (L2.tAvg10 != INT16_MIN) { float t = L2.tAvg10 / 10.0f;
-                                    tSum += t; if (t > tMax) tMax = t; tn++; }
-      if (L2.hMax10 != INT16_MIN) { float h = L2.hMax10 / 10.0f;
-                                    if (h > hMax) hMax = h; }
-      if (L2.ot10  != INT16_MIN)  { oSum += L2.ot10 / 10.0f; on++; }
-    }
-    if (tn)          r.tAvg10 = (int16_t)constrain(tSum / tn * 10.0f, -300.0f, 300.0f);
-    if (tMax > -300) r.tMax10 = (int16_t)(tMax * 10);
-    if (hMax > -300) r.hMax10 = (int16_t)constrain(hMax * 10, 0.0f, 1000.0f);
-    if (on)          r.outT10 = (int16_t)constrain(oSum / on * 10.0f, -300.0f, 300.0f);
-    if (!isnan(dryer.wtStartG())) r.wtS10 = (int16_t)constrain(dryer.wtStartG() / 10.0f, -3200.0f, 3200.0f);
-    if (!isnan(dryer.finalG()))   r.wtE10 = (int16_t)constrain(dryer.finalG() / 10.0f, -3200.0f, 3200.0f);
-    if (cfg.targetG > 0)          r.wtT10 = (int16_t)constrain(cfg.targetG / 10.0f, 0.0f, 3200.0f);
-    if (!isnan(s_vbStart))        r.vbS10 = (int16_t)(s_vbStart * 10);
-    if (battery.valid())          r.vbE10 = (int16_t)(battery.volts() * 10);
-    eelog::append(r);
-  }
-
-  prune();
-}
-
-uint32_t cycleNo()  { return s_counter; }
-
-uint16_t fileCount() { return (uint16_t)listFiles().size(); }
-
-String lastFile() {              // names are timestamps -> sort = newest last
-  auto files = listFiles();
-  if (files.empty()) return String();
-  std::sort(files.begin(), files.end());
-  return files.back();
-}
-
-void clear() {
-  eelog::clear();                     // AT24C256 registry too
-  auto files = listFiles();
-  for (auto &n : files) LittleFS.remove(String(CYCLE_DIR) + "/" + n);
-}
   File f = LittleFS.open(String(CYCLE_DIR) + "/" + fname, "w");
   if (!f) return;
 
@@ -6489,6 +6152,7 @@ String listingJson() {
 }
 
 } // namespace cyclelog
+
 /* ==========================  src/web.cpp  ========================== */
 #include <WiFi.h>
 #include <LittleFS.h>
@@ -6854,451 +6518,6 @@ static void handleCsv() {
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
   server.send(200, "text/csv", "");
   server.sendContent(F("sec,temp_avg_C,hum_avg_RH,hum_peak_RH,heat_pct,fan_pct,batt_V,batt_pct\r\n"));
-  ji(o, "battType", s.battType);      o += ",";
-  ji(o, "tzMinutes", s.tzMinutes);    o += ",";
-  jb(o, "smartVent", s.smartVent);    o += ",";
-  jb(o, "boostHeat", s.boostHeat);    o += ",";
-  jn(o, "kp", s.kp, 1); o += ","; jn(o, "ki", s.ki, 2); o += ","; jn(o, "kd", s.kd, 1); o += ",";
-  jb(o, "requireWeight", s.requireWeight);  o += ",";
-  jn(o, "weightRateG", s.weightRateG, 1);   o += ",";
-  ji(o, "weightMinY", s.weightMinY);
-}
-
-// ---------------------------------------------------------------------
-//  GET /  and  GET /online
-}
-
-// ---------------------------------------------------------------------
-//  POST /api/settings - validate, persist, apply (no JSON library)
-// ---------------------------------------------------------------------
-static void applyFromBody(const String &b, Settings &s) {
-  if (jhas(b, "setTemp"))   s.setTemp   = clampf(jgetnum(b, "setTemp",   s.setTemp),   40, 80);  // v2.0 ceiling
-  if (jhas(b, "tempHyst"))  s.tempHyst  = clampf(jgetnum(b, "tempHyst",  s.tempHyst), 0.2,  5);
-  if (jhas(b, "humHigh"))   s.humHigh   = clampf(jgetnum(b, "humHigh",   s.humHigh),   20, 95);
-  if (jhas(b, "humLow"))    s.humLow    = clampf(jgetnum(b, "humLow",    s.humLow),    10, 80);
-  if (jhas(b, "humTarget")) s.humTarget = clampf(jgetnum(b, "humTarget", s.humTarget),  5, 70);
-  if (jhas(b, "kp")) s.kp = clampf(jgetnum(b, "kp", s.kp), 0, 100);
-  if (jhas(b, "ki")) s.ki = clampf(jgetnum(b, "ki", s.ki), 0,  10);
-  if (jhas(b, "kd")) s.kd = clampf(jgetnum(b, "kd", s.kd), 0, 100);
-  if (jhas(b, "maxTemp"))
-    s.maxTemp = clampf(jgetnum(b, "maxTemp", s.maxTemp), s.setTemp + 5, 110);
-  if (jhas(b, "dryMinutes"))
-    s.dryMinutes = constrain((uint32_t)jgetnum(b, "dryMinutes", s.dryMinutes), 1U, 1440U);
-  if (jhas(b, "fanMin"))      s.fanMin      = constrain((int)jgetnum(b, "fanMin", s.fanMin), 0, 60);
-  if (jhas(b, "fanIn"))       s.fanIn       = constrain((int)jgetnum(b, "fanIn", s.fanIn), 10, 100);
-  if (jhas(b, "targetG"))     s.targetG     = constrain((float)jgetnum(b, "targetG", s.targetG), 0.0f, 9000.0f);
-  if (jhas(b, "stickCount"))    s.stickCount    = (uint16_t)constrain((int)jgetnum(b, "stickCount", s.stickCount), 0, 3000);
-  if (jhas(b, "stickWetG"))     s.stickWetG     = constrain((float)jgetnum(b, "stickWetG", s.stickWetG), 0.5f, 20.0f);
-  if (jhas(b, "pasteWaterPct")) s.pasteWaterPct = constrain((float)jgetnum(b, "pasteWaterPct", s.pasteWaterPct), 5.0f, 60.0f);
-  if (jhas(b, "targetMoistPct"))s.targetMoistPct= constrain((float)jgetnum(b, "targetMoistPct", s.targetMoistPct), 3.0f, 20.0f);
-  if (jhas(b, "fanTrigRH"))   s.fanTrigRH   = constrain((int)jgetnum(b, "fanTrigRH", s.fanTrigRH), 30, 90);
-  if (jhas(b, "fanTrigMin"))  s.fanTrigMin  = constrain((int)jgetnum(b, "fanTrigMin", s.fanTrigMin), 1, 10);
-  if (jhas(b, "fanBurstS"))   s.fanBurstS   = constrain((int)jgetnum(b, "fanBurstS", s.fanBurstS), 10, 300);
-  if (jhas(b, "fanOut"))      s.fanOut      = constrain((int)jgetnum(b, "fanOut", s.fanOut), 10, 100);
-  if (jhas(b, "fanSlope"))    s.fanSlope    = constrain((int)jgetnum(b, "fanSlope", s.fanSlope), 1, 12);
-  if (jhas(b, "heaterMax"))   s.heaterMax   = constrain((int)jgetnum(b, "heaterMax", s.heaterMax), 10, 100);
-  if (jhas(b, "cooldownSec")) s.cooldownSec = constrain((int)jgetnum(b, "cooldownSec", s.cooldownSec), 10, 600);
-  if (jhas(b, "bypassPct"))   s.bypassPct   = constrain((int)jgetnum(b, "bypassPct", s.bypassPct), 5, 50);
-  if (jhas(b, "cutoffPct"))   s.cutoffPct   = constrain((int)jgetnum(b, "cutoffPct", s.cutoffPct), 0, 40);
-  if (jhas(b, "battType"))    s.battType    = constrain((int)jgetnum(b, "battType", s.battType), 0, 3);
-  if (jhas(b, "tzMinutes"))   s.tzMinutes   = constrain((int)jgetnum(b, "tzMinutes", s.tzMinutes), -720, 840);
-  if (jhas(b, "requireHum"))  s.requireHum  = jgetbool(b, "requireHum", s.requireHum);
-  if (jhas(b, "smartVent"))   s.smartVent   = jgetbool(b, "smartVent", s.smartVent);
-  if (jhas(b, "boostHeat"))   s.boostHeat   = jgetbool(b, "boostHeat", s.boostHeat);
-  if (jhas(b, "requireWeight")) s.requireWeight = jgetbool(b, "requireWeight", s.requireWeight);
-  if (jhas(b, "weightRateG"))   s.weightRateG   = clampf(jgetnum(b, "weightRateG", s.weightRateG), 0.5, 50);
-  if (jhas(b, "weightMinY"))    s.weightMinY    = constrain((int)jgetnum(b, "weightMinY", s.weightMinY), 2, 120);
-  if (jhas(b, "scaleCal"))      s.scaleCal      = clampf(jgetnum(b, "scaleCal", s.scaleCal), 0.05, 200000);
-  if (s.cutoffPct >= s.bypassPct) s.cutoffPct = s.bypassPct - 1;   // keep order sane
-}
-
-static void handleSettings() {
-  String body = server.arg("plain");
-  if (!body.length()) { server.send(400, "text/plain", "empty body"); return; }
-  Settings s = cfg;
-  applyFromBody(body, s);
-  if (!saveSettings(s)) {
-    server.send(500, "text/plain", "nvs write failed");
-    return;
-  }
-  cfg = s;
-  dryer.applySettings(cfg);
-  scale.setFactor(cfg.scaleCal);               // recalibration round-trips
-  scale.setOffset(cfg.scaleOffset);
-  server.send(200, "text/plain", "ok");
-}
-
-// ---------------------------------------------------------------------
-//  simple actions
-// ---------------------------------------------------------------------
-static void handleStart() {
-  if (!door::calibrated()) {
-    server.send(403, "text/plain", "calibrate the scale first (known weight) - start locked");
-    return;
-  }
-  dryer.start();
-  server.send(200, "text/plain", "ok");
-}
-static void handleStop()    { dryer.stop();     server.send(200, "text/plain", "ok"); }
-static void handlePower()   { dryer.powerOn();  server.send(200, "text/plain", "ok"); }
-static void handleDefaults(){
-  jn(o, "hMax", sensors.hMax(), 1, sensors.anyOk());   o += ",";
-  ji(o, "heat", dryer.heatDuty());                     o += ",";
-  dryer.applySettings(cfg);
-  server.send(200, "text/plain", "ok");
-}
-
-// ---------------------------------------------------------------------
-//  clock: /api/settime (browser pushes its date & time automatically)
-// ---------------------------------------------------------------------
-  o += keypad.ok() ? "true" : "false";                o += ",";
-  js(o, "last", keypad.last() ? String(keypad.last()) : String(""));
-  o += "},";
-  tv.tv_sec = (time_t)server.arg("epoch").toInt();
-  tv.tv_usec = 0;
-  settimeofday(&tv, nullptr);
-  if (tv.tv_sec > (time_t)1700000000) {
-    sClockSynced = true;                       // a real phone clock arrived
-    clockSave((uint32_t)tv.tv_sec);
-    clockToRtc();
-  }
-  bool tzChanged = false;
-  if (server.hasArg("tz")) {
-    int tz = constrain(server.arg("tz").toInt(), -720, 840);
-  o += "},";
-
-  o += "\"dht\":{\"ok\":";  o += dht::outdoor.ok ? "true" : "false";  o += ",";
-  jn(o, "t", isnan(dht::outdoor.t) ? 0.0f : dht::outdoor.t, 1);   o += ",";
-  jn(o, "h", isnan(dht::outdoor.h) ? 0.0f : dht::outdoor.h, 0);
-  o += "},";
-
-  o += "\"door\":{\"fitted\":";                     // lock workflow state
-  o += door::fitted() ? "true" : "false";          o += ",";
-
-// ---------------------------------------------------------------------
-//  POST /api/weather - the phone's browser relays live outdoor weather
-// ---------------------------------------------------------------------
-static void handleWeather() {
-  String b = server.arg("plain");
-  if (!b.length()) { server.send(400, "text/plain", "empty body"); return; }
-  if (jhas(b, "t")) weather.tempC   = clampf(jgetnum(b, "t", 0), -60, 70);
-  if (jhas(b, "h")) weather.humRH   = clampf(jgetnum(b, "h", 0), 0, 100);
-  if (jhas(b, "r")) weather.rainPct = clampf(jgetnum(b, "r", 0), 0, 100);
-  if (jhas(b, "w")) weather.windKmh = clampf(jgetnum(b, "w", 0), 0, 200);
-  if (jhas(b, "c")) weather.code    = constrain((int)jgetnum(b, "c", 100), 0, 100);
-  if (jhas(b, "ep")) weather.epoch  = (uint32_t)jgetnum(b, "ep", 0);
-  if (jhas(b, "m"))  weather.manual = jgetbool(b, "m", false);
-  if (jhas(b, "loc")) {
-    strncpy(weather.loc, jgetstr(b, "loc").c_str(), sizeof(weather.loc) - 1);
-    weather.loc[sizeof(weather.loc) - 1] = 0;
-  }
-  weather.rxMs = millis();
-  // v2.0.19: on-device menu state (web virtual keypad); null = menu closed
-  {
-    String m = "null";
-    if (menu::active()) {
-      m = "{\"cur\":" + String(menu::cursor()) + ",\"edit\":" +
-          String(menu::editing() ? "true" : "false") + ",\"items\":[";
-// ---------------------------------------------------------------------
-//  cycle history: list / download / clear
-// ---------------------------------------------------------------------
-// ---- AT24C256 registry dump: every cycle summary, one CSV ------------
-static const char *eeEndName(uint8_t e) {
-  switch (e) { case 1: return "stopped"; case 2: return "fault";
-               case 3: return "timeout";  case 4: return "interrupted";
-               default: return "done"; }
-}
-static void handleEeLog() {
-  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-  server.send(200, "text/csv", "");
-  server.sendContent(F("seq,started,dur_min,mode,end,ecode,setT_C,tavg_C,tmax_C,"
-                       "hmax_RH,outT_C,wt_start_g,wt_end_g,wt_target_g,"
-                       "vb_start,vb_end,flags\r\n"));
-  char line[192];
-  for (uint16_t i = 0; i < eelog::count(); i++) {
-    eelog::EeRec r;
-    if (!eelog::get(i, r)) break;
-    char when[24] = "--";
-    time_t t = (time_t)r.startEpoch;
-    if (r.startEpoch > 1000) {
-      struct tm tmv;  localtime_r(&t, &tmv);
-      strftime(when, sizeof(when), "%Y-%m-%d %H:%M", &tmv);
-    }
-    char ec[6] = "-";
-    if (r.ecode) snprintf(ec, sizeof(ec), "E%02u", r.ecode);
-    snprintf(line, sizeof(line),
-      "%u,%s,%.1f,%s,%s,%s,%.1f,%.1f,%.1f,%.0f,%.1f,%.0f,%.0f,%.0f,%.1f,%.1f,%u\r\n",
-      (unsigned)r.seq, when, r.durS / 60.0f,
-      r.mode == 0 ? "agarbatti" : r.mode == 2 ? "silica" : "user",
-      eeEndName(r.endR), ec,
-      r.setT10 / 10.0f, r.tAvg10 / 10.0f, r.tMax10 / 10.0f,
-      r.hMax10 / 10.0f, r.outT10 / 10.0f,
-      (float)r.wtS10 * 10.0f, (float)r.wtE10 * 10.0f, (float)r.wtT10 * 10.0f,
-      r.vbS10 / 10.0f, r.vbE10 / 10.0f, r.flags);
-    server.sendContent(line);
-    if ((i & 0x1F) == 0) yield();
-  }
-  server.sendContent("");              // terminate the chunked body
-}
-
-static void handleCycles() {
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  server.send(200, "application/json", cyclelog::listingJson());
-}
-
-  }
-  jn(o, "wtStart",   isnan(dryer.wtStartG())  ? 0.0f : dryer.wtStartG(),  0); o += ",";
-  jn(o, "finalG",    isnan(dryer.finalG())    ? 0.0f : dryer.finalG(),    0); o += ",";
-  if (!path.length()) { server.send(404, "text/plain", "no such cycle"); return; }
-  File f = LittleFS.open(path, "r");
-  if (!f) { server.send(404, "text/plain", "open failed"); return; }
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  server.sendHeader("Content-Disposition",
-                    "attachment; filename=" + server.arg("file"));
-  server.streamFile(f, "text/csv");
-  f.close();
-}
-
-static void handleLastCycle() {
-  String fn = cyclelog::lastFile();
-  if (!fn.length()) { server.send(404, "text/plain", "no saved cycles yet"); return; }
-  File f = LittleFS.open(cyclelog::safePath(fn), "r");
-  if (!f) { server.send(404, "text/plain", "open failed"); return; }
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  server.sendHeader("Content-Disposition", "attachment; filename=" + fn);
-  server.streamFile(f, "text/csv");
-  f.close();
-}
-
-// ---- v2.0.19: virtual keypad key (touch display / web) ----------------
-static void handleVirtualKey() {
-  if (!server.hasArg("k") || server.arg("k").length() != 1) {
-    server.send(400, "text/plain", "k?"); return;
-  }
-  char k = server.arg("k")[0];
-  if (k >= 'a' && k <= 'd') k = k - 32;               // accept lowercase
-  bool ok = (k >= '0' && k <= '9') || (k >= 'A' && k <= 'D') ||
-            k == '*' || k == '#';
-  if (!ok) { server.send(400, "text/plain", "bad key"); return; }
-  dryerKey(k);      // beep + menu + start/stop/mode - exactly the panel path
-  server.send(200, "text/plain", "ok");
-}
-
-static void handleCyclesClear() {
-  cyclelog::clear();
-  server.send(200, "text/plain", "ok");
-}
-
-// ---------------------------------------------------------------------
-//  OTA firmware update - upload a .bin from the browser (phone/laptop
-//  connected to the dryer hotspot) at http://192.168.4.1/update
-// ---------------------------------------------------------------------
-static const char kOtaPage[] PROGMEM = R"HTML(<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Firmware update</title><style>
-body{background:#070b14;color:#eef3fb;font:15px/1.6 system-ui,sans-serif;max-width:520px;margin:40px auto;padding:0 18px}
-h1{font-size:19px}p{color:#a9b6c9;font-size:13.5px}
-.card{background:#0d1526;border:1px solid #26365a;border-radius:14px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
-input[type=file]{width:100%;margin:10px 0;color:#a9b6c9}
-button{width:100%;padding:13px;border:none;border-radius:12px;font-weight:750;cursor:pointer;
-background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff}
-#bar{height:12px;border-radius:7px;background:#101a33;border:1px solid #26365a;margin-top:12px;overflow:hidden}
-#fill{height:100%;width:0%;background:linear-gradient(90deg,#d4af37,#f0d078)}
-#msg{margin-top:10px;font-size:13px;color:#d4af37;min-height:20px}
-</style></head><body>
-<h1>&#11014; Firmware update</h1>
-<div class="card">
-<p>1. Export the compiled <b>.bin</b> (Arduino IDE: Sketch &rarr; Export compiled binary).<br>
-2. Pick it below and press Update. The dryer reboots itself when done.<br>
-Refused while a cycle is RUNNING &mdash; stop the cycle first.</p>
-<input type="file" id="f" accept=".bin">
-<button onclick="up()">&#128228; Update firmware</button>
-<div id="bar"><div id="fill"></div></div><div id="msg"></div>
-</div>
-<script>
-function up(){var f=document.getElementById('f').files[0];if(!f){alert('pick a .bin first');return}
-var x=new XMLHttpRequest(),fd=new FormData();fd.append('update',f,f.name);
-x.open('POST','/update');
-x.upload.onprogress=function(e){if(e.lengthComputable){var p=Math.round(e.loaded/e.total*100);
-document.getElementById('fill').style.width=p+'%';document.getElementById('msg').textContent=p+' %'}};
-x.onload=function(){document.getElementById('msg').textContent='done: '+x.responseText;
-setTimeout(function(){location.href='/'},4000)};
-x.send(fd)}
-</script></body></html>)HTML";
-
-static bool otaRefuse = false;
-
-static void handleOtaGet() {
-  server.send_P(200, "text/html", kOtaPage);
-}
-
-static void handleOtaUpload() {          // called chunk-by-chunk
-  HTTPUpload &up = server.upload();
-  if (up.status == UPLOAD_FILE_START) {
-    otaRefuse = (dryer.state() == DState::RUNNING);
-    if (otaRefuse) { Serial.println("[ota] REFUSED: cycle RUNNING - stop it first"); return; }
-    Serial.printf("[ota] start: %s\n", up.filename.c_str());
-    uint32_t maxSketch = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
-    if (!Update.begin(maxSketch)) { Update.printError(Serial); otaRefuse = true; }
-  } else if (up.status == UPLOAD_FILE_WRITE) {
-    if (otaRefuse) return;
-    if (Update.write((uint8_t *)up.buf, up.currentSize) != up.currentSize) {
-      Update.printError(Serial); otaRefuse = true;
-    }
-  } else if (up.status == UPLOAD_FILE_END) {
-    if (otaRefuse) return;
-    if (Update.end(true)) {
-      Serial.printf("[ota] SUCCESS: %u bytes written - rebooting\n", (unsigned)up.totalSize);
-    } else { Update.printError(Serial); otaRefuse = true; }
-  }
-}
-
-static void handleOtaDone() {            // after the upload finished
-  if (otaRefuse) {
-    server.send(403, "text/plain",
-                Update.hasError() ? "write FAILED - power is fine, try again"
-                                  : "refused: cycle RUNNING - stop it first");
-    return;
-  }
-  server.send(200, "text/plain", "OK - rebooting, reconnect in ~15 s");
-  delay(800);                             // let the response reach the browser
-  ESP.restart();
-}
-
-static void handleAddTime() {
-  int m = server.hasArg("min") ? server.arg("min").toInt() : 15;
-  dryer.addMinutes(m);
-  server.send(200, "text/plain", "ok");
-}
-
-static void handleScale() {        // /api/scale?tare=1  or  /api/scale?cal=1000
-  if (!scale.ok()) { server.send(503, "text/plain", "scale absent"); return; }
-  if (server.hasArg("tare")) {
-    scale.tare();
-  } else if (server.hasArg("cal")) {
-    float known = server.arg("cal").toFloat();
-    if (known <= 0) { server.send(400, "text/plain", "cal?"); return; }
-    scale.calibrate(known);
-    door::markCalibrated();                    // unlock the workflow
-  } else { server.send(400, "text/plain", "tare or cal"); return; }
-  cfg.scaleCal   = scale.calFactor();          // persist for next boots
-  cfg.scaleOffset = scale.offset();
-  saveSettings(cfg);
-  server.send(200, "text/plain", "ok");
-}
-
-static void handleManualHeat() {   // web knob: /api/heat?d=0..100
-  if (!server.hasArg("d")) { server.send(400, "text/plain", "d?"); return; }
-  int d = server.arg("d").toInt();
-  if (d < 0) d = 0;
-  if (d > 100) d = 100;
-  dryer.setManualHeat((uint8_t)d);
-  server.send(200, "text/plain", "ok");
-}
-
-// ---------------------------------------------------------------------
-//  setup
-// ---------------------------------------------------------------------
-namespace web {
-
-void clockBoot() {           // restore last-saved time after power-down
-  time_t now = time(nullptr);
-  if (now > (time_t)1700000000) return;        // already running (soft reset)
-  Preferences p;
-  p.begin("dryer", true);
-  uint32_t ep = p.getUInt("tsep", 0);
-  p.end();
-  if (ep > 1700000000UL) {
-    struct timeval tv;
-    tv.tv_sec = (time_t)ep; tv.tv_usec = 0;
-    settimeofday(&tv, nullptr);
-    Serial.printf("[clock] restored last-saved time (%lu) - STALE, "
-                  "open the site once to correct it\n", (unsigned long)ep);
-  } else {
-    Serial.println(F("[clock] no saved time yet - history files use "
-                     "sequence numbers until a phone syncs"));
-  }
-}
-
-void clockTick() {            // periodic persistence (call from loop/handle)
-  static uint32_t last = 0;
-  uint32_t now = millis();
-  if (last != 0 && now - last < TIME_SAVE_MS) return;
-  last = now ? now : 1;
-  time_t t = time(nullptr);
-  if (sClockSynced && t > (time_t)1700000000) clockSave((uint32_t)t);
-}
-
-void begin() {
-  clockBoot();               // last-saved wall clock (if the battery died)
-
-  // --- hotspot ---------------------------------------------------------
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(AP_SSID, AP_PASS, AP_CHANNEL, 0, AP_MAX_CLIENTS);
-  jn(o, "outH", oH, 1, hasOut);             o += "},";
-
-  o += "\"bat\":{";
-  jn(o, "v", battery.valid() ? battery.volts() : 0.0f, 2); o += ",";
-  ji(o, "pct", battery.percent());          o += ",";
-  dns.start(53, "*", ip);
-
-  server.on("/",            HTTP_GET,  handleRoot);
-  server.on("/display",     HTTP_GET,  handleDisplay);   // kiosk screen
-  server.on("/online",      HTTP_GET,  handleOnline);
-  server.on("/api/data",    HTTP_GET,  handleData);
-  server.on("/api/history", HTTP_GET,  handleHistory);
-  server.on("/api/log.csv", HTTP_GET,  handleCsv);
-  buildSettings(o, defaultSettings());
-  o += "}}";
-  server.on("/api/stop",    HTTP_POST, handleStop);
-  server.on("/api/power",   HTTP_POST, handlePower);
-  server.on("/api/defaults",HTTP_POST, handleDefaults);
-  server.on("/api/addtime",  HTTP_POST, handleAddTime);
-  server.on("/api/heat",     HTTP_POST, handleManualHeat);
-  server.on("/api/scale",    HTTP_POST, handleScale);
-  server.on("/api/settime",     HTTP_POST, handleSetTime);
-  server.on("/api/mode",        HTTP_POST, []() {
-    if (!server.hasArg("m")) { server.send(400, "text/plain", "m?"); return; }
-    dryer.applyMode(constrain(server.arg("m").toInt(), 0, 2));
-    server.send(200, "text/plain", "ok");
-  });
-  server.on("/api/weather",     HTTP_POST, handleWeather);
-  server.on("/api/cycles",      HTTP_GET,  handleCycles);
-  server.on("/eelog.csv",       HTTP_GET,  handleEeLog);
-  server.on("/lastcycle.csv",   HTTP_GET,  handleLastCycle);
-  server.on("/api/key",         HTTP_POST, handleVirtualKey);
-  server.on("/api/cycle",       HTTP_GET,  handleCycleDownload);
-  server.on("/api/clearcycles", HTTP_POST, handleCyclesClear);
-  server.on("/update", HTTP_GET,  handleOtaGet);
-  server.on("/update", HTTP_POST, handleOtaDone, handleOtaUpload);
-  server.onNotFound([]() {                 // captive portal redirect
-    server.sendHeader("Location", "http://" + WiFi.softAPIP().toString() + "/", true);
-    server.send(302, "text/plain", "");
-  });
-  server.begin();
-  bz::play(BP::AP_UP);                     // #27: hotspot is up (owner spec)
-}
-
-void handle() {
-  clockTick();               // persist wall clock (30 min)
-  dns.processNextRequest();
-  server.handleClient();
-}
-  for (uint16_t i = skip; i < n; i++)
-    o += String(dryer.logAt(i).hAvg10 / 10.0, 1) + (i + 1 < n ? "," : "");
-  o += "]}";
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  server.send(200, "application/json", o);
-}
-
-// ---------------------------------------------------------------------
-//  GET /api/log.csv - the full data dump
-// ---------------------------------------------------------------------
-static void handleCsv() {
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-  server.send(200, "text/csv", "");
-  server.sendContent(F("sec,temp_avg_C,hum_avg_RH,hum_peak_RH,heat_pct,fan_pct,batt_V,batt_pct\r\n"));
   String chunk;
   chunk.reserve(512);
   uint16_t n = dryer.logCount();
@@ -7405,6 +6624,7 @@ static void handleSetTime() {
   if (tv.tv_sec > (time_t)1700000000) {
     sClockSynced = true;                       // a real phone clock arrived
     clockSave((uint32_t)tv.tv_sec);
+    clockToRtc();
   }
   bool tzChanged = false;
   if (server.hasArg("tz")) {
@@ -7730,6 +6950,7 @@ void handle() {
 }
 
 } // namespace web
+
 /* ==========================  src/main.cpp  ========================== */
 /**
  * @file main.cpp
@@ -8117,6 +7338,26 @@ static void initSystem() {
 #endif
 
   printBanner();
+  delay(200);
+
+  // 2. settings + subsystems
+  cfg = loadSettings();
+  Serial.printf("[cfg] setTemp=%.1fC max=%.0fC RH %0.f-%0.f%% time=%umin\n",
+                cfg.setTemp, cfg.maxTemp, cfg.humLow, cfg.humHigh,
+                (unsigned)cfg.dryMinutes);
+
+  sensors.begin();
+  Serial.printf("[sens] S1(top)=%s  S2(bottom)=%s\n",
+                sensors.s1ok() ? "OK" : "MISSING",
+                sensors.s2ok() ? "OK" : "MISSING");
+
+  battery.begin();
+  battery.setType(cfg.battType);
+  Serial.printf("[batt] %.2f V (%u%%)\n", battery.volts(), battery.percent());
+
+  dryer.begin(cfg);
+
+  // 3. cycle history (LittleFS) - first boot formats, takes a few seconds
   cyclelog::begin();
   Serial.println("[hist] cycle storage ready");
 
@@ -8385,7 +7626,7 @@ void loop() {
 
 #endif  // DRYER_RTOS
 /* ==== END OF FILE ====
- * total lines (wc -l): 8391   non-blank lines: 7749
+ * total lines (wc -l): 7632   non-blank lines: 7007
  * build 2026-09-25 - if these numbers differ from what you see,
  * you are looking at an older copy; regenerate: node tools/single-file/assemble.js
  */

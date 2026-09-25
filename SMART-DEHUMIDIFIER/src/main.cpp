@@ -402,6 +402,26 @@ static void initSystem() {
 #endif
 
   printBanner();
+  delay(200);
+
+  // 2. settings + subsystems
+  cfg = loadSettings();
+  Serial.printf("[cfg] setTemp=%.1fC max=%.0fC RH %0.f-%0.f%% time=%umin\n",
+                cfg.setTemp, cfg.maxTemp, cfg.humLow, cfg.humHigh,
+                (unsigned)cfg.dryMinutes);
+
+  sensors.begin();
+  Serial.printf("[sens] S1(top)=%s  S2(bottom)=%s\n",
+                sensors.s1ok() ? "OK" : "MISSING",
+                sensors.s2ok() ? "OK" : "MISSING");
+
+  battery.begin();
+  battery.setType(cfg.battType);
+  Serial.printf("[batt] %.2f V (%u%%)\n", battery.volts(), battery.percent());
+
+  dryer.begin(cfg);
+
+  // 3. cycle history (LittleFS) - first boot formats, takes a few seconds
   cyclelog::begin();
   Serial.println("[hist] cycle storage ready");
 
