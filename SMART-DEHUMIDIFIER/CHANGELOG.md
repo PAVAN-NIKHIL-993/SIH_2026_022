@@ -64,6 +64,20 @@ Firmware ships as one file: `arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DE
   sketches. Docs updated: PIN-MAP, PARAMETERS, PIN-CONFIG, WIRING,
   PINS-S3-PCF2, manual 02 §4.14 (DS1307 wiring table), manual 03 module
   table, variants README, sensor-tests README, BOM, checklist, diagrams.
+- **Single-file sketches (`tools/single-file/assemble.js`)**:
+  - The S3 copy's HOW TO FLASH told S3 owners to pick the classic
+    **"ESP32 Dev Module"**. It now gives the real S3 settings (ESP32S3 Dev
+    Module, USB CDC On Boot: Enabled, Flash Size 16MB, PSRAM Disabled, the
+    native USB port), the same as the variants README and the CI build.
+  - The pin quick-reference listed the disabled TFT's placeholder pins, so
+    the S3 table showed GPIO 41 (DHT11) and GPIO 48 (status pixel) twice.
+    TFT pins are now hidden while `DISPLAY_ENABLED` is 0, like every other
+    compiled-out module, and a NOTE says why.
+  - `check-all.sh` step 6 (run by CI on every push) failed on any day after
+    the sketches were committed: each regeneration stamped a new build
+    date, so `git diff --exit-code` was never clean. A copy whose code is
+    unchanged now keeps its date byte-for-byte; the date only moves when
+    the code does. (Pre-existing; CI exposed it once it ran the gate.)
 - `FW_VERSION` 2.0.23.
 
 ## 2026-09 (v2.0.22 — sources restored, every sketch compiled for real)

@@ -10,8 +10,12 @@
  *  ARDUINO IDE 2 - HOW TO FLASH (no libraries needed, seriously):
  *    1. Boards Manager (icon left) -> search "esp32" -> install
  *       "esp32 by Espressif Systems".
- *    2. Tools -> Board -> esp32 -> "ESP32 Dev Module".
- *    3. Plug the ESP32 with a USB DATA cable. Tools -> Port -> select it.
+ *    2. Tools -> Board -> esp32 -> "ESP32S3 Dev Module", then in Tools:
+ *       USB CDC On Boot: Enabled  (Serial Monitor over the USB-C port)
+ *       Flash Size: 16MB (8MB on an N8)  PSRAM: Disabled (never used -
+ *       fine on an N16R8 too; GPIO 35/36/37 stay untouched)
+ *    3. Plug the S3 in with a USB DATA cable - the USB-C port labelled
+ *       USB (native). Tools -> Port -> select it.
  *    4. Click Upload (->). If it hangs on "Connecting...", hold the BOOT
  *       button on the ESP32 until "Writing..." starts, then release.
  *    5. Serial Monitor at 115200 shows the boot log.
@@ -40,13 +44,9 @@
  *    GPIO10   DHT22 chamber sensor (cool-return path)
  *    GPIO41   DHT11 outdoor sensor (shade!)
  *    GPIO48   RGB status pixel (on-board WS2812; 48=v1.0 boards, 38=v1.1)
- *    GPIO40   ILI9488 TFT SCK
- *    GPIO41   ILI9488 TFT MOSI
- *    GPIO42   ILI9488 TFT CS
- *    GPIO47   ILI9488 TFT DC
- *    GPIO48   ILI9488 TFT RST
  *    GPIO 0   BOOT button: start/stop (S3 boards)
  *
+ *    NOTE: ILI9488 TFT OFF on this variant (config: DISPLAY_ENABLED) - the /display web page replaces it
  *    NOTE: door = LIMIT SWITCH ONLY (no lock): start gated in software, mid-cycle open = FAULT
  *    NOTE: BOOT button = start/stop, hold 2 s = power on
  *    NOTE: keypad PCF8574 at 0x20 (never PCF8574A - AHT10 clash)
@@ -7723,6 +7723,6 @@ void loop() {
 #endif  // DRYER_RTOS
 /* ==== END OF FILE ====
  * total lines (wc -l): 7728   non-blank lines: 7103
- * build 2026-09-25 - if these numbers differ from what you see,
+ * build 2026-09-26 - if these numbers differ from what you see,
  * you are looking at an older copy; regenerate: node tools/single-file/assemble.js
  */

@@ -34,13 +34,9 @@
  *    GPIO15   BUTTON-1: 3 s hard off / 10 s reboot
  *    GPIO18   BUTTON-2: default automation
  *    GPIO13   buzzer KY-012
- *    GPIO12   ILI9488 TFT SCK
- *    GPIO 0   ILI9488 TFT MOSI
- *    GPIO 2   ILI9488 TFT CS
- *    GPIO17   ILI9488 TFT DC
- *    GPIO23   ILI9488 TFT RST
  *
  *    NOTE: weigh scale OFF on this variant (config: SCALE_ENABLED)
+ *    NOTE: ILI9488 TFT OFF on this variant (config: DISPLAY_ENABLED) - the /display web page replaces it
  *    NOTE: door hardware OFF - the calibrate->load->ready workflow runs in software
  *    NOTE: supply relay not wired - mode shown + opto verified, switching is manual
  *    NOTE: keypad PCF8574 at 0x20 (never PCF8574A - AHT10 clash)
@@ -7682,7 +7678,7 @@ void loop() {
 
 #endif  // DRYER_RTOS
 /* ==== END OF FILE ====
- * total lines (wc -l): 7688   non-blank lines: 7063
- * build 2026-09-25 - if these numbers differ from what you see,
+ * total lines (wc -l): 7684   non-blank lines: 7059
+ * build 2026-09-26 - if these numbers differ from what you see,
  * you are looking at an older copy; regenerate: node tools/single-file/assemble.js
  */
