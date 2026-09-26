@@ -28,20 +28,20 @@ The rest of this document is the **VS Code + PlatformIO** procedure.
 **3. Open the project folder — the RIGHT folder**
 - File → Open Folder… → select **`SMART-DEHUMIDIFIER`** (the folder that directly
   contains `platformio.ini`).
-- ⚠ Do NOT open the repo root (`arena`) — PlatformIO only sees a project
+- ⚠ Do NOT open the repo root (`SIH_2026_022`) — PlatformIO only sees a project
   when `platformio.ini` is in the folder you opened.
 
 **4. Let it download the toolchain (first time only)**
 - The moment the folder opens, PlatformIO starts installing the
-  `espressif32` platform + xtensa compiler + ArduinoJson library
-  (auto-read from `lib_deps`). Watch the little terminal at the bottom
+  `espressif32` platform + xtensa compiler (no libraries — the firmware
+  uses core built-ins only). Watch the little terminal at the bottom
   ("PlatformIO: Initializing" / "Installing").
 - Takes 3–10 minutes depending on internet. Needs to finish before
   uploading. You'll know it's healthy when the blue status bar at the
   bottom shows **`env:esp32dev`** with no spinner.
 
-> You do NOT need to install ArduinoJson manually — `lib_deps` in
-> `platformio.ini` fetches it. You do NOT need the Arduino IDE at all.
+> Nothing else to install — no libraries, and you do NOT need the
+> Arduino IDE at all.
 
 ---
 
@@ -129,7 +129,7 @@ pio device monitor      # serial console (Ctrl+C to exit)
 | `Permission denied: '/dev/ttyUSB0'` (Linux) | `sudo usermod -aG dialout $USER` then **log out and back in** |
 | Stuck at `Connecting...` | Hold **BOOT** during connecting (see step 8) |
 | `Error: pip …` or red deprecation notes during install | Warnings only — ignore; only `=== [FAILED] ===` matters |
-| Build error on `ArduinoJson.h: No such file` | Let the first auto-install finish, or run `pio pkg install` once with internet |
+| (old checkouts only) `ArduinoJson.h: No such file` | Current code needs no libraries — update to the latest firmware |
 | Antivirus makes builds crawl (Windows) | Add the `.pio` folder to exclusions |
 | `Serial port busy` when uploading | Close any open Serial Monitor / other program using the port, then retry |
 | Port disappears after flash | Normal for a moment (USB re-enumerates) — replug if it doesn't return |

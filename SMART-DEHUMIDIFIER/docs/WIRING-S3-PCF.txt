@@ -56,14 +56,14 @@
  S3 GPIO 4  -> battery divider midpoint      (100k from +, 15k to MOSFET)
  S3 GPIO 5  -> 2N7000 gate (divider low side)
  S3 GPIO 8  -> I2C0 SDA  (PCF #1 keypad + PCF #2 panel + AHT10 #1
-                          + AT24C256 EEPROM 0x50, v2.0.17)
+                          + AT24C256 EEPROM 0x50, v2.0.17
+                          + DS1307 RTC 0x68, v2.0.23)
  S3 GPIO 9  -> I2C0 SCL
  S3 GPIO 10 -> DHT22 . DATA  (chamber cool-return sensor = source #2;
               +10k pull-up to 3V3, DHT22 VCC -> 3V3, GND -> GND)
  S3 GPIO 11 -> spare  (I2C1 free - room for a future I2C part)
- S3 GPIO 40 -> DS1302 . RST   (v2.0.21: date & time, coin cell)
- S3 GPIO 42 -> DS1302 . SCLK
- S3 GPIO 47 -> DS1302 . I/O
+ S3 GPIO 40, 42, 47 -> spare (the v2.0.21 DS1302 lived here; the v2.0.23
+              DS1307 RTC is on I2C0 = GPIO 8/9, see below)
  S3 GPIO 12 -> 555 shifter pin 4 -> 555 pin 3 -> BTS7960 RPWM
  S3 GPIO 13 -> BTS7960 R_EN + L_EN (jumpered together)
  S3 GPIO 14 -> P-MOSFET latch hold (see A)
@@ -73,17 +73,25 @@
               IN3 -> 5V header, IN4 -> GND. In the current build 18 = opto,
               21 = door)
  (NO DISPLAY in this build - the website is the screen: "/" = full
-  control, "/display" = kiosk page. FREE now: 3, 11
-  (40/42/47 = DS1302 RTC, 41 = DHT11, 21 = door, 48 = on-board
-  pixel); when the front panel
+  control, "/display" = kiosk page. FREE now: 3, 11, 40, 42, 47
+  (41 = DHT11, 21 = door, 48 = on-board pixel; the RTC is on I2C);
+  when the front panel
   moves to PCF #2 another 8 free up: 6, 7, 15, 16, 18, 21, 38, 39.)
  AHT10 #1 . SDA/SCL -> GPIO 8 / GPIO 9      (chamber top)
 AT24C256  . SDA/SCL -> GPIO 8 / GPIO 9, A0/A1/A2 -> GND = 0x50
              (32 kB cycle-registry EEPROM, v2.0.17 - auto-detected)
  DHT22 . DATA        -> GPIO 10             (cool return, +10k)
- DS1302 module (v2.0.21 - date & time that survive a FULL power-down):
-   VCC -> 3V3, GND -> GND, RST -> GPIO 40, SCLK -> GPIO 42, I/O ->
-   GPIO 47, BZ -> unused. The module's CR2032 stays ON the module.
+ DS1307 RTC module (v2.0.23 - date & time that survive a FULL power-down):
+   VCC -> 5V  (the DS1307 needs 4.5-5.5 V; at 3.3 V it ignores the bus)
+   GND -> GND,  SDA -> GPIO 8,  SCL -> GPIO 9   (I2C0, address 0x68)
+   SQW / DS / BAT pads -> unused. The coin cell stays ON the module.
+   !! "Tiny RTC" boards pull SDA/SCL up to 5 V through R2 + R3: remove
+      both (the bus already has 3.3 V pull-ups) or fit an I2C level
+      shifter - ESP32 pins are NOT 5 V tolerant. With a plain CR2032
+      also remove the LIR2032 charger (D1, R4, R5) and bridge R6.
+   Its AT24C32 EEPROM (0x50) is detected as "smaller than 32 kB" and
+   left alone; a separate AT24C256 registry then needs A0 -> 3V3 (0x51)
+   and ELOG_ADDR 0x51 in config-s3.h.
    No chip fitted? Nothing to do - the dryer runs on phone-sync + NVS.
  S3 GPIO 0  = BOOT button on the board (start/stop; nothing to wire)
  Strapping 45/46 stay unwired; 35/36/37 = PSRAM on octal (R8) boards

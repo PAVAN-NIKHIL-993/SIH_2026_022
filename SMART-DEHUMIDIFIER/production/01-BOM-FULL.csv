@@ -21,7 +21,7 @@ SPDT toggle switch,Input,1,solar / bypass mode request,"15-30",S3 GPIO39 / class
 Buzzer module KY-012,Input,1,active module,"10-30",MANDATORY v2.0: classic GPIO13 / S3 GPIO38
 80 mm 12 V fan,Actuators,1,outlet (exhaust) only,"100-200",v2.0 removed the intake fan; L298N ENB = S3 GPIO17 / classic GPIO14
 4x4 hex keypad + PCF8574 backpack,Input,1,buy PCF8574 NOT PCF8574A,"150-280",0x20 clash-free; full menu navigation (B menu 2/4/6/8 arrows A ok C mode D run)
-PCF8574 module #2 (front panel, mixed I/O),Expander,1,strap A0->3V3 A1/A2->GND = 0x21; PCF8574 NOT PCF8574A,"60-90",P0/P1 supply relays + P2/P3 buttons + P4 toggle + P5 opto + P6 door switch + P7 buzzer; needs 8x 10k pull-ups
+"PCF8574 module #2 (front panel, mixed I/O)",Expander,1,strap A0->3V3 A1/A2->GND = 0x21; PCF8574 NOT PCF8574A,"60-90",P0/P1 supply relays + P2/P3 buttons + P4 toggle + P5 opto + P6 door switch + P7 buzzer; needs 8x 10k pull-ups
 Nichrome wire 1.0 mm,Heater,2.3 m,0.32 ohm total (2 x 0.64 ohm parallel),"150-250",500 W @ 12.6 V
 Ceramic standoffs M4,Heater,8,coil to mesh shelf,"100-200",no metal contact
 Pillar body steel/SS,Structure,1,300 x 300 mm x 1830 mm,"3,000-8,000",or 12 mm sealed plywood (half cost)
@@ -37,5 +37,5 @@ Terminal strips + labels,Assembly,1 set,,"200-400",label BOTH ends of every wire
 Heat-shrink + zip ties,Assembly,1 set,,"150-300",
 DHT22 / AM2302 sensor,Sensors,1,chamber cool-return source #2; GPIO10 + 10k pull-up (v2.0.9),"150-250",2nd chamber sensor: averages + RH-peak + safety cut keep working
 DHT11 outdoor sensor,Sensors,1,3-wire; GPIO 41 + 10k pull-up; north-side shade,"100-180",outdoor weather + real-time smart venting + web OUT line + CSV columns
-DS1302 RTC module (CR2032 coin cell),Sensors,1,3-wire; S3: RST 40 / SCLK 42 / I-O 47; VCC->3V3; BZ unused,"30-60","date & time that survive a FULL power-down (v2.0.21); auto-detected - no chip = phone-sync + NVS clock
+DS1307 RTC module (coin cell; "Tiny RTC" I2C),Sensors,1,"I2C0: S3 SDA 8 / SCL 9 (classic 21/22), addr 0x68; VCC->5V; remove the 5 V pull-ups R2/R3 (or level shifter)","40-80","date & time that survive a FULL power-down (v2.0.23; replaces the DS1302); auto-detected - no chip = phone-sync + NVS clock"
 INA226 I2C power monitor,FUTURE,1,spec future/04 (0x40 on Wire),"250",solar telemetry upgrade

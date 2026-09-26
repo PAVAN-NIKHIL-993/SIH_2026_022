@@ -38,7 +38,7 @@
 // =====================================================================
 // Firmware version - shown on the serial banner, the website footer and
 // /api/data; bump it on every release (OTA makes versions matter).
-#define FW_VERSION      "2.0.21"
+#define FW_VERSION      "2.0.23"
 
 #define AP_SSID "AgarbattiDryer"
 #define AP_PASS "dryer1234"          // min 8 chars
@@ -48,9 +48,10 @@
 // OPTIONAL online UI: the dashboard is also hosted on GitHub Pages and
 // loaded through http://192.168.4.1/online (tiny bridge page on the ESP
 // relays API calls, because browsers block https->http directly).
-// Enable Pages in repo Settings (main branch, /docs folder) and put the
-// URL here. Leave as-is and /online simply falls back to the built-in UI.
-#define ONLINE_UI_URL "https://pavan-nikhil-993.github.io/arena/"
+// Repo Settings -> Pages -> Source: "GitHub Actions" (.github/workflows/
+// pages.yml publishes SMART-DEHUMIDIFIER/docs on every push to main), then
+// put the site URL here. No internet -> /online falls back to the built-in UI.
+#define ONLINE_UI_URL "https://pavan-nikhil-993.github.io/SIH_2026_022/"
 
 // =====================================================================
 //  PIN MAP  (ESP32-S3 DevKit - the pillar build; v2.0.20 remap in)
@@ -293,9 +294,9 @@
 // read-only kiosk page that behaves exactly like the hardware screen
 // (a phone/tablet mounted on the pillar shows it). Set DISPLAY_ENABLED
 // 1 + wire SCK 40 / MOSI 41 / CS 42 / DC 47 / RST 48 if a screen ever
-// returns. Pins 3/11 are FREE in this build; 40/42/47 carry the DS1302
-// RTC (v2.0.21), 41 the DHT11 (v2.0.20), 48 the status pixel (v2.0.15), so
-// a returning screen must re-pick MOSI/RST around them.
+// returns. Pins 3/11/40/42/47 are FREE in this build (the RTC moved to
+// I2C in v2.0.23); 41 carries the DHT11 (v2.0.20) and 48 the status pixel
+// (v2.0.15), so a returning screen must re-pick MOSI/RST around them.
 #define DISPLAY_ENABLED  0
 #define PIN_TFT_SCK      40          // SPI clock (any output GPIO)
 #define PIN_TFT_MOSI     41          // SPI data
@@ -317,17 +318,19 @@
 #define PIN_TXDISP_TX   3          //  set 1 to drive a UNO+TFT again)
 #define TXDISP_BAUD     9600
 
-// ---- DS1302 RTC: date & time, coin-cell backed (v2.0.21) --------------
+// ---- DS1307 RTC: date & time, coin-cell backed (v2.0.23) --------------
 // Keeps the wall clock through a FULL power-down (even a battery
-// disconnect). Auto-detected at boot: no chip = the phone-sync + NVS
-// clock, nothing else changes. Every real time set (phone sync, keypad
-// menu, serial 'rtcset') is written to the chip.
-// Wiring: VCC -> 3V3, GND -> GND, SCLK -> 40, I/O -> 42, RST -> 47
-// (the module's BZ pin unused; its CR2032 stays on the module).
+// disconnect). I2C at 0x68 on the SAME bus as the AHT10 / PCF8574 /
+// EEPROM - no GPIO of its own. Auto-detected at boot: no chip = the
+// phone-sync + NVS clock, nothing else changes. Every real time set
+// (phone sync, keypad menu, serial 'rtcset') is written to the chip.
+// Wiring: VCC -> 5V (the DS1307 needs 4.5-5.5 V), GND -> GND,
+//         SDA -> GPIO 8, SCL -> GPIO 9   (= PIN_I2C0_SDA / PIN_I2C0_SCL)
+// !! Remove the module's 5 V pull-ups (R2 + R3 on "Tiny RTC" boards) or
+//    use an I2C level shifter - ESP32 pins are NOT 5 V tolerant.
+// (v2.0.21-22 drove a DS1302 on 40/42/47 - those pins are free again.)
 #define RTC_ENABLED    1
-#define PIN_RTC_RST    40
-#define PIN_RTC_SCLK   42
-#define PIN_RTC_IO     47
+#define RTC_I2C_ADDR   0x68        // DS1307 (and DS3231) - fixed
 
 // ---- Weigh scale: HX711 + load cells - ENABLED on the S3 --------------
 // "Dry to weight": the cycle ends when the batch stops losing weight.

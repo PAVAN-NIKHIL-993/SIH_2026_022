@@ -3,6 +3,146 @@
 All notable changes to the Smart Dehumidifier firmware & UI.
 Firmware ships as one file: `arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DEHUMIDIFIER-single-file.ino`.
 
+## 2026-09 (v2.0.23 — DS1307 RTC on I2C, royal blue & golden brown UI)
+
+- **RTC is now a DS1307 on the I2C bus** (the owner's module; the v2.0.21
+  DS1302 driver is replaced).
+  - `src/rtc.*` is a library-free Wire driver at **0x68**: ACK detection,
+    one burst read, CH (clock-halt) flag = untrusted until set, BCD
+    sanity, 12/24 h decoding, writes in 24 h mode with CH cleared, and the
+    same `rtc::` API.
+  - Wiring shares **I2C0**: **S3 SDA 8 / SCL 9** (classic 21 / 22).
+    **VCC 5 V** (the DS1307 needs 4.5–5.5 V). Remove the module's 5 V
+    pull-ups (R2/R3 on "Tiny RTC" boards) or use a level shifter, because
+    ESP32 pins are not 5 V tolerant.
+  - **GPIO 40/42/47 are free again** (S3 spare pool: 3, 11, 40, 42, 47).
+    Enabled on both variants; auto-detected. DS3231 boards work unchanged.
+  - Fixed while porting: the old driver decoded 20:00–23:59 as 00–03 (hours
+    masked with 0x1F in 24 h mode), and the boot `[diag]` line printed the
+    RTC status before the RTC was even probed.
+  - `tools/host-rtc-test` now models the DS1307 on a mock Wire bus
+    (11 cases: late-evening hours, CH, 12 h mode, junk, DS3231 century
+    bit, RAM untouched).
+- **`sensor-tests/rtc-test` rewritten for the DS1307**: an I2C bus scan
+  that names every device, register dump, CH/12-24 h state, SET TIME FROM
+  PHONE with read-back, and 5 V / pull-up hints on failure.
+- **EEPROM guard**: `eelog` probes the chip size. The 4 kB AT24C32 found on
+  DS1307 boards (same 0x50) is left alone instead of being corrupted as a
+  32 kB AT24C256.
+- **Website: royal blue + golden brown, never black.**
+  - A fixed royal-blue sky over a golden-brown horizon with a warm gold
+    seam (a plain blue→brown blend goes muddy grey). It also works on
+    iPhones, which ignore `background-attachment: fixed`.
+  - Glass royal cards with a gold edge and gold titles; golden-brown /
+    royal-blue tabs on a floating glass bar.
+  - Styled buttons (they were unstyled browser grey): gold Start and
+    Save & Start, a golden-brown Reset, a segmented mode control, flat
+    disabled state.
+  - Chart, gauge and badge colours re-tuned for contrast.
+  - Layout fixes: the weight card's Tare/Calibrate row overflowed; gauge
+    units and the MAX HEAT-UP badge wrapped.
+  - 🎨 Theme: six royal / golden presets plus a custom colour. It is
+    stored under a new key, so phones that had saved the old near-black
+    default switch over.
+  - The `/display` kiosk, the `/online` loader, the GitHub Pages UI and all
+    bench-test pages use the same palette.
+- **Every sensor-test phone page was broken**: `/data` sent invalid JSON
+  whenever a card had 2+ rows (the rows array was never bracketed, and
+  single-card pages never closed the card), and the keypad grid emitted
+  `"1,""2,"`. All fixed.
+  - New `tools/sensor-page-test` compiles all 10 sketches on the host
+    (mock Arduino core), for S3 + classic, with nothing / everything
+    connected, and parses the real JSON. It is part of `check-all.sh`
+    step 4.
+- **`tools/preview/serve.js`**: preview the dashboard, kiosk and online UI
+  in a browser with simulated live data. No ESP32 needed.
+- Pin parking: compiled-out modules (TFT, display bridge) no longer
+  reserve their pins, so the S3 spares 3/40/42/47 are parked pull-down as
+  documented. GPIO0 (boot strap) is skipped on the classic too.
+- BOM CSV repaired (an unquoted comma and an unclosed quote swallowed a
+  row). The lowercase "dehummidifier" spelling is fixed in all bench
+  sketches. Docs updated: PIN-MAP, PARAMETERS, PIN-CONFIG, WIRING,
+  PINS-S3-PCF2, manual 02 §4.14 (DS1307 wiring table), manual 03 module
+  table, variants README, sensor-tests README, BOM, checklist, diagrams.
+- **Single-file sketches (`tools/single-file/assemble.js`)**:
+  - The S3 copy's HOW TO FLASH told S3 owners to pick the classic
+    **"ESP32 Dev Module"**. It now gives the real S3 settings (ESP32S3 Dev
+    Module, USB CDC On Boot: Enabled, Flash Size 16MB, PSRAM Disabled, the
+    native USB port), the same as the variants README and the CI build.
+  - The pin quick-reference listed the disabled TFT's placeholder pins, so
+    the S3 table showed GPIO 41 (DHT11) and GPIO 48 (status pixel) twice.
+    TFT pins are now hidden while `DISPLAY_ENABLED` is 0, like every other
+    compiled-out module, and a NOTE says why.
+  - `check-all.sh` step 6 (run by CI on every push) failed on any day after
+    the sketches were committed: each regeneration stamped a new build
+    date, so `git diff --exit-code` was never clean. A copy whose code is
+    unchanged now keeps its date byte-for-byte; the date only moves when
+    the code does. (Pre-existing; CI exposed it once it ran the gate.)
+- **`arduino-ide/s3_T1/s3_T1.ino`**: the owner's named copy of the S3
+  single-file sketch, byte-identical to v2.0.23. It is a snapshot: later
+  firmware changes land in `SMART-DEHUMIDIFIER-s3-single-file.ino`.
+  - `compile-sketches.sh` builds it with the S3 settings, so the exact file
+    being flashed is proven; the build is skipped if the folder is deleted.
+  - The compile job also posts a one-line `N builds OK / N failed` notice
+    on the run page.
+- `FW_VERSION` 2.0.23.
+
+## 2026-09 (v2.0.22 — sources restored, every sketch compiled for real)
+
+- **Firmware sources restored exactly to v2.0.21.** The first import (from
+  the Arena patch files) applied 23 partial diffs onto v2.0.19 text instead
+  of their real base. 14 files were still garbled, so **neither sketch
+  could compile**:
+  - `control.h` had no `struct LogRec`;
+  - `main.cpp` had lost the settings / sensors / battery / dryer init;
+  - `web.cpp`, `config.h`, `buzzer.*` and `cyclelog.*` carried hundreds of
+    duplicated lines;
+  - `platformio.ini` had lost `board = esp32dev`.
+
+  The files were recovered byte-exact: the v2.0.21 patch was applied onto
+  its real base (the old `arena` repo, commit 48ee940), every file was
+  hash-verified against the patch, and the v2.0.21 renames were then
+  re-applied. `tools/audit-symbols.py` had been reporting this all along
+  but was not wired into the gate.
+- **Real compile on every push** (`scripts/compile-sketches.sh`, arduino-cli,
+  esp32 core 3.3.12 / AVR 1.8.8) — 16 builds:
+  - both firmware variants, plus the S3 firmware in `DRYER_RTOS=1` mode;
+  - `board-test-s3`, the 10 sensor tests and the 2 UNO display sketches.
+
+  It found and fixed:
+  - **classic ESP32 firmware did not link**: the serial `rtc` / `rtcset`
+    commands call the DS1302 driver, which compiles out with
+    `RTC_ENABLED 0`. `rtc.cpp` now provides the no-op API that `rtc.h`
+    documents.
+  - `rtc-test`: its `bitWrite()` / `bitRead()` helpers clashed with
+    Arduino's macros (renamed the way `src/rtc.cpp` was in v2.0.21).
+  - `board-test-s3`: `ESP.getEfuseMac()` was misused, and the MAC line
+    printed its bytes scrambled.
+  - `battery-test`: a String label was passed as `const char*`.
+  - `dht-test`: the IDE's auto-prototype landed above `struct DhtDev`.
+- **Online UI**: `ONLINE_UI_URL` → `https://pavan-nikhil-993.github.io/SIH_2026_022/`.
+  It pointed at the old `arena` repo, which has no Pages site. The Pages
+  setup steps now say Source: **GitHub Actions**; a branch deploy cannot
+  serve `SMART-DEHUMIDIFIER/docs`.
+- **CI / tooling**:
+  - `check-all.sh` grows from 4 to 6 steps: the symbol audit and the host
+    DS1302 driver test join it.
+  - GitHub Actions move to Node 24 (checkout / setup-node / setup-python
+    v7, configure-pages v6, upload-pages-artifact v5, deploy-pages v5).
+  - The Pages deploy now *skips* with a notice until Pages is enabled,
+    instead of failing every push to main.
+  - jsdom moves to 30.
+- **Docs**:
+  - stale S3 pins corrected (outdoor DHT11 = 41, door = 21);
+  - ArduinoJson instructions removed (the firmware needs no libraries);
+  - repo name updated; a broken README anchor fixed.
+- **Repo hygiene**:
+  - the four patch dumps (~15 MB) are removed from the root and kept in
+    git history;
+  - the host RTC test outputs are gitignored;
+  - the final newline stripped by the import is restored in 104 files.
+- `FW_VERSION` 2.0.22.
+
 ## 2026-09 (v2.0.21 — DS1302 real-time clock, S3)
 
 - **Date & time that survive a FULL power-down**: DS1302 RTC module

@@ -47,7 +47,7 @@
  GPIO 39  (in)      *  |  ->  SOLAR toggle (SPDT common)      [v2.1: PCF#2 P4]
  GPIO 48             |  ->  on-board RGB status pixel (WS2812 DATA,
                         |  SPI-driven, zero libs; v1.0 DevKitC. v1.1 = 38!)
- GPIO 40, 42..47, 3, 11 |  FREE - no display in this build (the website is
+ GPIO 40, 42, 47, 3, 11 |  FREE - no display in this build (the website is
                         |  the screen: "/" = full control, "/display" = kiosk;
                         |  41 = DHT11, 48 = pixel)
  GPIO 6   (out)     *  |  ->  supply relay . CH1 IN (solar)   [v2.1: PCF#2 P0]
@@ -56,6 +56,8 @@
  GPIO 0   (BOOT btn)  |  on-board button: short = start/stop, 2 s = power on
 ----------------------+-------------------------------------------------------
  AHT10 #1 . SDA/SCL   |  ->  GPIO 8 / GPIO 9   (shares I2C0 with the PCFs)
+ DS1307 RTC SDA/SCL   |  ->  GPIO 8 / GPIO 9   (0x68, VCC 5V, 5 V pull-ups
+                      |      removed - v2.0.23; date & time on coin cell)
  DHT22 . DATA          |  ->  GPIO 10   (chamber #2, +10k to 3V3)
 
 
@@ -181,6 +183,8 @@ v2.0.9: chamber = AHT10 top (GPIO 8/9) + DHT22 cool-return (GPIO10);
          used (octal PSRAM on R8 boards); 3/11 remain spare
  v2.0.20: S3 remap for headers without GPIO 22-34 (the pillar board):
          DHT11 33 -> 41, door 34 -> 21; spare = 3/11/40/42/47
+ v2.0.23: DS1307 RTC on I2C0 (8/9 @ 0x68) replaces the v2.0.21 DS1302 -
+         40/42/47 are spare again
  v2.0.15: on-board RGB status pixel on GPIO48 (SPI, no libs); 37-pattern
          buzzer engine; completion summary on site + /display
  v2.1  : ONE mixed PCF #2 carries relays + buzzer + buttons + toggle +

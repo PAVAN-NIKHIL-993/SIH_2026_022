@@ -30,8 +30,9 @@ let html = part[1].split(')HTML"', 2)[0];
 
 // ---------------------------------------------------------------- banner
 const banner = `
-<div id="modeBanner" style="max-width:860px;margin:10px auto 0;padding:8px 14px;
-border:1px dashed #2c3a32;border-radius:10px;font-size:12px;color:#8fa89a">
+<div id="modeBanner" style="max-width:908px;margin:10px auto 0;padding:8px 14px;
+border:1px dashed rgba(233,196,106,.55);border-radius:10px;font-size:12px;color:#d6def4;
+background:rgba(12,34,104,.66)">
 &#127760; online interface &middot; <span id="modeTxt">connecting&hellip;</span></div>
 `;
 html = html.replace('<nav>', banner + '\n<nav>');
@@ -44,7 +45,7 @@ const ghSection = `
       this browser (localStorage) and is sent only to api.github.com. The ESP itself never touches
       the internet.</p>
       <div class="frow">
-        <div><label>Repository (user/repo)</label><input id="ghRepo" placeholder="PAVAN-NIKHIL-993/arena"></div>
+        <div><label>Repository (user/repo)</label><input id="ghRepo" placeholder="PAVAN-NIKHIL-993/SIH_2026_022"></div>
         <div><label>Branch</label><input id="ghBranch" value="main"></div>
         <div><label>Folder</label><input id="ghDir" value="dryer-cycles"></div>
       </div>
@@ -52,7 +53,7 @@ const ghSection = `
         <div><label>Token (fine-grained PAT, contents:write)</label><input type="password" id="ghToken" placeholder="github_pat_&hellip;"></div>
         <div><label>ESP address (standalone mode)</label><input id="espBase" value="http://192.168.4.1"></div>
         <div><label>&nbsp;</label><button class="act" onclick="ghBackup()"
-          style="width:100%;background:#233029;color:var(--tx)">&#128228; Back up all cycles</button></div>
+          style="width:100%">&#128228; Back up all cycles</button></div>
       </div>
       <div class="note" id="ghStat"></div>
     </details>
