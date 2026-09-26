@@ -78,6 +78,13 @@ Firmware ships as one file: `arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DE
     date, so `git diff --exit-code` was never clean. A copy whose code is
     unchanged now keeps its date byte-for-byte; the date only moves when
     the code does. (Pre-existing; CI exposed it once it ran the gate.)
+- **`arduino-ide/s3_T1/s3_T1.ino`**: the owner's named copy of the S3
+  single-file sketch, byte-identical to v2.0.23. It is a snapshot: later
+  firmware changes land in `SMART-DEHUMIDIFIER-s3-single-file.ino`.
+  - `compile-sketches.sh` builds it with the S3 settings, so the exact file
+    being flashed is proven; the build is skipped if the folder is deleted.
+  - The compile job also posts a one-line `N builds OK / N failed` notice
+    on the run page.
 - `FW_VERSION` 2.0.23.
 
 ## 2026-09 (v2.0.22 — sources restored, every sketch compiled for real)

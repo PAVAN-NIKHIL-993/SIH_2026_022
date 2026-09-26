@@ -279,6 +279,7 @@ SMART-DEHUMIDIFIER/
 ├── arduino-ide/…                               ← THE FIRMWARE (zero libraries)
 │     SMART-DEHUMIDIFIER-single-file.ino                  classic ESP32 DevKit V1
 │     SMART-DEHUMIDIFIER-s3-single-file.ino               ESP32-S3 variant (recommended)
+│     s3_T1/s3_T1.ino                                     same S3 code, owner's named copy (v2.0.23)
 ├── variants/esp32-s3/                          S3 pin map + config + why-S3 README
 ├── src/ + platformio.ini                       shared logic, PlatformIO layout
 │     config.h (all pins/defaults) · main.cpp · control · sensors · aht10 ×2
@@ -302,7 +303,7 @@ SMART-DEHUMIDIFIER/
 │                           host DS1307 test · sensor-page JSON test ·
 │                           UI test suites (jsdom) · preview server
 ├── scripts/check-all.sh    one-command release gate (same as CI)
-├── scripts/compile-sketches.sh  real arduino-cli build of all 15 sketches (CI)
+├── scripts/compile-sketches.sh  real arduino-cli build of all 16 sketches (CI)
 ├── ../.github/workflows/   CI (gate + real compile) · Pages deploy
 ├── CHANGELOG.md            release history
 └── ADVANCED-IDEAS.txt      the original idea vault
