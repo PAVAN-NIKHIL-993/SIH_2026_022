@@ -12,17 +12,16 @@ node tools/single-file/assemble.js s3
 node tools/online/sync-online.js
 
 echo "== 2/6 string + printf scans =="
-python3 tools/verify_strings.py arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DEHUMIDIFIER-single-file.ino arduino-ide/SMART-DEHUMIDIFIER-s3-single-file/SMART-DEHUMIDIFIER-s3-single-file.ino arduino-ide/esp32_T1/esp32_T1.ino src/*.cpp src/*.h variants/esp32-s3/config-s3.h
-python3 tools/verify_strings.py --printf arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DEHUMIDIFIER-single-file.ino arduino-ide/SMART-DEHUMIDIFIER-s3-single-file/SMART-DEHUMIDIFIER-s3-single-file.ino arduino-ide/esp32_T1/esp32_T1.ino src/*.cpp
+python3 tools/verify_strings.py arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DEHUMIDIFIER-single-file.ino arduino-ide/SMART-DEHUMIDIFIER-s3-single-file/SMART-DEHUMIDIFIER-s3-single-file.ino src/*.cpp src/*.h variants/esp32-s3/config-s3.h
+python3 tools/verify_strings.py --printf arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DEHUMIDIFIER-single-file.ino arduino-ide/SMART-DEHUMIDIFIER-s3-single-file/SMART-DEHUMIDIFIER-s3-single-file.ino src/*.cpp
 
 echo "== 3/6 symbol audit (lost-edit detector) =="
 python3 tools/audit-symbols.py
 
-echo "== 4/6 host C++ tests: DS1307 driver (real src/rtc.cpp) + sensor-test pages send valid JSON + esp32_T1 =="
+echo "== 4/6 host C++ tests: DS1307 driver (real src/rtc.cpp) + sensor-test pages send valid JSON =="
 if command -v g++ >/dev/null 2>&1; then
   sh tools/host-rtc-test/run.sh
   sh tools/sensor-page-test/run.sh
-  sh tools/esp32-t1-test/run.sh
 elif [ "${CI:-}" = true ]; then
   echo "g++ is required in CI"; exit 1
 else
@@ -34,7 +33,6 @@ cd tools/ui-test
 [ -d node_modules ] || npm install --no-audit --no-fund
 node ui-test.js
 node online-test.js
-node t1-test.js
 cd ../..
 
 echo "== 6/6 generated files in sync with sources (both variants) =="

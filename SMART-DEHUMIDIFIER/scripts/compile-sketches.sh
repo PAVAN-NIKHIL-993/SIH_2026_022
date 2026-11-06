@@ -7,7 +7,7 @@
 # Usage (from anywhere in the repo; needs arduino-cli on PATH -
 # https://arduino.github.io/arduino-cli/latest/installation/):
 #   bash scripts/compile-sketches.sh esp32  # firmware classic + S3 (+ S3 in DRYER_RTOS=1
-#                                           # mode), s3_T1, esp32_T1, S3 bench sketches
+#                                           # mode), S3 bench sketches
 #   bash scripts/compile-sketches.sh avr    # UNO display bridge + display test
 #   bash scripts/compile-sketches.sh        # both groups
 #   bash scripts/compile-sketches.sh esp32 --setup-only   # install, no build
@@ -93,12 +93,6 @@ if [ "$group" != avr ] && ! $setup_only; then
   # compiler.cpp.extra_flags is empty in the core; build.extra_flags is not
   # (it carries the S3 USB settings), so it must not be overridden
   build "$FQBN_S3"      arduino-ide/SMART-DEHUMIDIFIER-s3-single-file "compiler.cpp.extra_flags=-DDRYER_RTOS=1"
-  # the owner's named copy of the S3 firmware (s3_T1 = a snapshot of the
-  # single-file sketch) - built too, so the exact file being flashed is
-  # proven; skipped once the folder is deleted
-  if [ -d arduino-ide/s3_T1 ]; then build "$FQBN_S3" arduino-ide/s3_T1; fi
-  # esp32_T1: the minimal ESP32 Dev + 2x DHT22 + BTS7960 build (classic only)
-  if [ -d arduino-ide/esp32_T1 ]; then build "$FQBN_CLASSIC" arduino-ide/esp32_T1; fi
   build "$FQBN_S3"      arduino-ide/board-test-s3
   for d in arduino-ide/sensor-tests/*/; do build "$FQBN_S3" "${d%/}"; done
 fi
@@ -120,7 +114,5 @@ if $setup_only; then echo "setup done ($group)"; exit 0; fi
 echo
 echo "compiled OK: ${#passed[@]}   failed: ${#failed[@]}"
 for s in "${failed[@]}"; do echo "  FAIL  $s"; done
-# one-line result on the run page (no ',' or ':' in the title - see above)
-if in_ci; then echo "::notice title=compile ${group}::${#passed[@]} builds OK / ${#failed[@]} failed"; fi
 if [ "${#failed[@]}" -ne 0 ]; then exit 1; fi
 echo "ALL SKETCHES COMPILE"

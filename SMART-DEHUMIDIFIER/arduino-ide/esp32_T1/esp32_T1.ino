@@ -1,48 +1,40 @@
 /*
  * ============================================================================
- *  esp32_T1 - MINIMAL AGARBATTI DRYER
- *  ESP32 DevKit + 2x DHT22 + BTS7960 heater driver (through the 555)
+ *  esp32_T1 - MINIMAL AGARBATTI DRYER            (single file, ESP32 Dev)
+ *  ESP32 DevKit + 2x DHT22 + BTS7960 heater (via 555) + fan (one EN pin)
  * ============================================================================
- *  One file, no extra libraries (only the esp32 board package).
+ *  ARDUINO IDE
+ *    Board: "ESP32 Dev Module"  (Boards Manager: "esp32 by Espressif Systems")
+ *    No libraries to install. Upload, then on the phone join WiFi
+ *    "AgarbattiDryer" / "dryer1234" and open http://192.168.4.1
+ *    Serial Monitor 115200 shows the boot log and a status line every 10 s.
+ *    Stuck on "Connecting..." while uploading? Hold BOOT until it writes.
  *
- *  ARDUINO IDE 2 - HOW TO FLASH
- *    1. Boards Manager -> search "esp32" -> install "esp32 by Espressif Systems".
- *    2. Tools -> Board -> esp32 -> "ESP32 Dev Module".
- *    3. USB DATA cable -> Tools -> Port -> select it -> Upload.
- *       Stuck on "Connecting..."? Hold BOOT until "Writing..." starts.
- *    4. Phone -> WiFi "AgarbattiDryer" / "dryer1234" -> open http://192.168.4.1
- *    Serial Monitor 115200: boot log + one status line every 10 s.
- *
- *  WIRING (ESP32 DevKit V1)
- *    GPIO 25 -> 555 pin 4 (RESET);  555 pin 3 (OUT) -> BTS7960 RPWM
- *               (555 on 5 V lifts the 3.3 V PWM to 5 V - GPIO HIGH = heat)
+ *  WIRING
+ *    GPIO 25 -> 555 pin 4 (RESET); 555 pin 3 -> BTS7960 RPWM   (heater PWM)
  *    GPIO 26 -> BTS7960 R_EN + L_EN (tied together)
- *               + 10 k resistor GPIO 26 -> GND (recommended): the heater
- *               stays OFF while the ESP32 boots or is being flashed
- *    BTS7960: LPWM -> GND, VCC -> 5 V, GND -> common GND,
- *             B+ / B- -> 12 V supply, M+ / M- -> heater coil
- *    GPIO 32 -> DHT22 #1 DATA    GPIO 33 -> DHT22 #2 DATA
- *               each: VCC -> 3V3, GND -> GND, 10 k DATA -> 3V3
- *               (3-pin DHT22 modules already have the 10 k)
- *    Both DHT22 go INSIDE the chamber, away from the coil (rated to 80 C).
+ *               BTS7960: LPWM -> GND, VCC -> 5 V, B+/B- -> 12 V, M+/M- -> coil
+ *    GPIO 14 -> fan driver EN (single pin, on/off)
+ *               L298N: remove the ENB jumper, ENB <- GPIO 14, IN3 -> 5 V,
+ *               IN4 -> GND, fan on OUT3/OUT4  (or a MOSFET / relay input;
+ *               active-low relay board -> set FAN_ON_LEVEL to LOW)
+ *    GPIO 32 -> DHT22 #1 DATA      GPIO 33 -> DHT22 #2 DATA
+ *               each: VCC -> 3V3, GND, 10 k DATA -> 3V3 (modules have it).
+ *               Both inside the chamber, away from the coil (rated 80 C).
+ *    10 k to GND on GPIO 26 and GPIO 14: heater + fan stay off while the
+ *    ESP32 boots or is flashed (GPIO 14 may blip the fan for a moment at
+ *    power-up).  All grounds common.
  *
  *  WHAT IT DOES
- *    - holds the chamber at the target (40-80 C): full power until 1.5 C
- *      below the target, then PID (integral gain tuned for the DHT22)
- *    - chamber temperature = average of the working DHT22s; one may fail
- *      (warning, keeps drying), both offline 15 s = fault
- *    - stops by itself after the drying time (1-1440 min)
- *    - SAFETY: heater off at boot / when idle / on any fault; hard cut when
- *      the hottest sensor reaches 90 C; heater watchdog: no temperature
- *      rise for 3 min at high power = fault (dead coil, fuse, 12 V or EN
- *      wire - or a sensor that is not in the chamber)
- *    - web page: live readings, target + time, Start / Update / Stop;
- *      target and time survive power cuts (a cut always ends the cycle)
- *
- *  REMOVED vs the full SMART-DEHUMIDIFIER firmware: AHT10s, weigh scale,
- *  keypad + menus, displays, RTC, EEPROM + cycle logs, door, supply relays,
- *  battery monitor, buzzer, buttons, power latch, status LED, fan, OTA,
- *  online UI, weather, GitHub backup.
+ *    Heater : full power up to (target - 1.5 C), then PID holds the target.
+ *             Stops by itself when the drying time is over.
+ *    Fan    : Auto = vents while drying when humidity >= 60 %, off <= 50 %.
+ *             On / Off buttons override it (back to Auto after a restart).
+ *    Safety : heater off at boot, when stopped and on any fault; cut at 90 C
+ *             (hottest sensor); no Start above 85 C; one sensor lost =
+ *             warning, both lost = fault after 15 s; no temperature rise in
+ *             3 min at high power = fault (coil / fuse / 12 V / EN wire).
+ *    Target and time are remembered; after a power cut it stays stopped.
  * ============================================================================
  */
 #include <Arduino.h>
@@ -51,16 +43,21 @@
 #include <Preferences.h>
 
 // ================================================================ SETTINGS
-#define FW_NAME         "esp32_T1 v1.0"
+#define FW_NAME         "esp32_T1 v1.1"
 #define AP_SSID         "AgarbattiDryer"
 #define AP_PASS         "dryer1234"      // at least 8 characters
 
 #define PIN_BTS_RPWM    25    // -> 555 pin 4; 555 pin 3 -> BTS7960 RPWM
 #define PIN_BTS_EN      26    // -> BTS7960 R_EN + L_EN
+#define PIN_FAN_EN      14    // -> fan driver EN
 #define PIN_DHT1        32    // DHT22 #1 DATA
 #define PIN_DHT2        33    // DHT22 #2 DATA
 
-#define HEATER_PWM_HZ   1000  // 1 kHz through the 555 (as the full firmware)
+#define FAN_ON_LEVEL    HIGH  // LOW for an active-low relay board
+#define FAN_ON_RH       60    // Auto: fan on at/above this humidity (drying)
+#define FAN_OFF_RH      50    // ... and off again at/below this
+
+#define HEATER_PWM_HZ   1000  // 1 kHz through the 555
 #define PWM_BITS        10    // duty 0..1023
 #define HEATER_MAX_PCT  100   // 100 = 500 W coil; 70 = ~350 W (PSU only)
 
@@ -74,11 +71,9 @@
 
 #define BAND_C          1.5f  // full power until (target - BAND_C), then PID
 #define REBOOST_C       5.0f  // fell this far below (door opened) -> full power
-#define KP              10.0f // heater % per C          (as the full firmware)
-#define KI              0.05f // heater % per (C * s)    (full firmware: 0.2 -
-                              //   with DHT22-only sensing that oscillated by
-                              //   4-9 C in simulation; 0.05 holds +-0.2 C)
-#define KD              5.0f  // heater % per (C / s)    (as the full firmware)
+#define KP              10.0f // heater % per C
+#define KI              0.05f // heater % per (C * s)  - suits the slow DHT22
+#define KD              5.0f  // heater % per (C / s)
 
 #define READ_MS         2500  // DHT22 cadence (needs >= 2 s between reads)
 #define SENSOR_FAIL_MS  15000 // both sensors offline this long -> fault
@@ -89,6 +84,8 @@
 // =================================================================== STATE
 enum State : uint8_t { IDLE, RUNNING, DONE, FAULT };
 static const char *const STATE_NAME[] = {"IDLE", "RUNNING", "DONE", "FAULT"};
+enum FanMode : uint8_t { FAN_MODE_AUTO, FAN_MODE_ON, FAN_MODE_OFF };
+static const char *const FAN_MODE_NAME[] = {"AUTO", "ON", "OFF"};
 
 struct Dht { uint8_t pin; float t, h; bool ok; uint8_t miss; };
 static Dht dht1 = {PIN_DHT1, NAN, NAN, false, 0};
@@ -101,6 +98,8 @@ static State    state    = IDLE;
 static int      setC     = DEF_SET_C;     // target, whole degrees C
 static uint16_t minutes  = DEF_MINUTES;   // drying time
 static uint8_t  heatPct  = 0;             // heater output now, %
+static FanMode  fanMode  = FAN_MODE_AUTO;
+static bool     fanOn    = false;
 static bool     holding  = false;         // false = full-power heat-up
 static float    integ    = 0, lastE = 0;  // PID memory
 static uint32_t startMs  = 0, elapsedS = 0;
@@ -203,6 +202,23 @@ static float maxT() {
   return dht1.ok ? dht1.t : dht2.ok ? dht2.t : NAN;
 }
 
+// ===================================================================== FAN
+static void fanSet(bool on) {
+  if (on != fanOn) Serial.printf("[fan] %s\n", on ? "ON" : "OFF");
+  fanOn = on;
+  digitalWrite(PIN_FAN_EN, on ? FAN_ON_LEVEL : !FAN_ON_LEVEL);
+}
+
+// Auto: vent moist air while drying (humidity hysteresis); On / Off = manual
+static void fanControl() {
+  if (fanMode != FAN_MODE_AUTO) { fanSet(fanMode == FAN_MODE_ON); return; }
+  float h = avgH();
+  if (state != RUNNING || isnan(h)) fanSet(false);
+  else if (h >= FAN_ON_RH)          fanSet(true);
+  else if (h <= FAN_OFF_RH)         fanSet(false);
+  // between FAN_OFF_RH and FAN_ON_RH: keep the current state
+}
+
 // ================================================================ SETTINGS
 static void loadSettings() {
   prefs.begin("dryer-t1", false);
@@ -266,8 +282,7 @@ static int pid(float t) {
   return (int)(out + 0.5f);
 }
 
-// runs after every sensor read (READ_MS)
-static void control(uint32_t now) {
+static void heaterControl(uint32_t now) {
   if (state != RUNNING) {
     heater(0);
     if (state == IDLE)
@@ -332,6 +347,12 @@ static void control(uint32_t now) {
     msg[0] = 0;
 }
 
+// runs after every sensor read (READ_MS) and after every command
+static void control(uint32_t now) {
+  heaterControl(now);
+  fanControl();
+}
+
 // NULL = started, else the reason it was refused
 static const char *startCycle() {
   if (state == RUNNING) return NULL;                 // already running
@@ -353,6 +374,7 @@ static void stopCycle() {
   elapsedS = 0;
   heater(0);
   msg[0] = 0;
+  fanControl();
 }
 
 // ===================================================================== WEB
@@ -361,93 +383,95 @@ static const char PAGE[] PROGMEM = R"HTML(<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Agarbatti Dryer</title>
 <style>
-:root{--gold:#f2c46d;--brown:#8a5a14;--card:rgba(20,44,128,.62);--edge:rgba(242,196,109,.6)}
-*{box-sizing:border-box}
+*{box-sizing:border-box;margin:0}
 html{background:#1d48b8}
-body{margin:0;min-height:100vh;color:#fff;font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{min-height:100vh;padding:18px 14px;color:#fff;font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 body::before{content:"";position:fixed;inset:0;z-index:-1;
  background:radial-gradient(110% 40% at 50% 74%,rgba(247,201,111,.34),transparent 70%),
  linear-gradient(180deg,#2352c9 0%,#1d48b8 36%,#3560c8 55%,#c4914a 68%,#a8741d 80%,#8a5a14 100%)}
-main{max-width:480px;margin:0 auto;padding:14px}
-header{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 10px}
-h1{margin:0;font-size:21px;color:var(--gold)}
-.pill{padding:4px 12px;border-radius:999px;font-size:13px;font-weight:700;background:#3560c8;border:1px solid var(--edge)}
-.pill.RUNNING{background:var(--gold);color:#3b2606}
-.pill.DONE{background:#2f8f5b}
-.pill.FAULT{background:#a8321c}
-.card{background:var(--card);border:1px solid var(--edge);border-radius:16px;padding:14px 16px;margin:10px 0;box-shadow:0 6px 18px rgba(10,20,60,.25)}
-.lbl{font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--gold)}
-.big{font-size:52px;font-weight:700;line-height:1.1}
-.big small{font-size:22px;font-weight:600}
-.bar{height:10px;border-radius:6px;background:rgba(255,255,255,.2);overflow:hidden;margin:10px 0 4px}
-.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#f7c96f,#c4914a);transition:width .6s}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.two .card{margin:0}
-.v{font-size:22px;font-weight:700}
-.off{opacity:.5}
-#msg{background:rgba(138,90,20,.92);border-color:var(--gold)}
-label{display:block;font-size:14px;margin:4px 0 10px}
-input{width:100%;margin-top:4px;padding:10px 12px;font:inherit;font-size:18px;color:#fff;background:rgba(255,255,255,.12);border:1px solid var(--edge);border-radius:10px}
-.btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-button{padding:13px;font:inherit;font-weight:700;border-radius:12px;border:1px solid var(--edge);cursor:pointer}
-#go{background:var(--gold);color:#3b2606}
-#stop{background:var(--brown);color:#fff}
-footer{text-align:center;font-size:12px;opacity:.85;margin:12px 0}
+main{max-width:420px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+h1{font-size:20px;font-weight:600;color:#f6cf7e}
+#st{font-size:12px;font-weight:700;letter-spacing:.5px;padding:4px 11px;border-radius:99px;background:rgba(255,255,255,.18)}
+#st.RUNNING{background:#f6cf7e;color:#3b2606}
+#st.DONE{background:#2f8f5b}
+#st.FAULT{background:#b3361f}
+.card{background:rgba(16,38,110,.55);border:1px solid rgba(246,207,126,.35);border-radius:14px;padding:16px;margin-bottom:12px}
+.temp{font-size:58px;font-weight:700;line-height:1}
+.temp small{font-size:20px;font-weight:500;opacity:.8}
+.sub{opacity:.85;margin-top:8px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px;text-align:center}
+.stats div{background:rgba(255,255,255,.08);border-radius:10px;padding:8px 4px}
+.stats b{display:block;font-size:18px}
+.stats span{font-size:12px;opacity:.75}
+.sens{font-size:13px;opacity:.8;margin-top:12px}
+#msg{background:rgba(138,90,20,.9);border-color:#f6cf7e}
+.row{display:flex;gap:10px}
+label{flex:1;font-size:13px;opacity:.9}
+input{width:100%;margin-top:4px;padding:10px;font:inherit;font-size:18px;color:#fff;background:rgba(255,255,255,.1);border:1px solid rgba(246,207,126,.45);border-radius:10px}
+button{flex:1;padding:12px;font:inherit;font-weight:600;color:#fff;background:rgba(255,255,255,.1);border:1px solid rgba(246,207,126,.45);border-radius:10px;cursor:pointer}
+.btns{margin-top:12px}
+#go{background:#f6cf7e;color:#3b2606;border-color:#f6cf7e}
+#stop{background:#8a5a14;border-color:#8a5a14}
+.fan{display:flex;align-items:center;gap:8px;margin-top:14px}
+.fan span{font-size:13px;opacity:.9;width:36px}
+.fan button{padding:8px}
+.fan button.on{background:#f6cf7e;color:#3b2606;border-color:#f6cf7e}
 </style></head><body><main>
-<header><h1>Agarbatti Dryer</h1><span id="st" class="pill">...</span></header>
+<header><h1>Agarbatti Dryer</h1><span id="st">...</span></header>
 <section class="card">
- <div class="lbl">Chamber</div>
- <div class="big"><span id="t">--</span><small> &deg;C</small></div>
- <div>Humidity <b id="h">--</b> % &middot; Target <b id="ts">--</b> &deg;C</div>
- <div class="bar"><i id="hb"></i></div>
- <div>Heater <b id="hp">0</b> % <span id="ph"></span></div>
- <div id="tm"></div>
+ <div class="temp"><span id="t">--</span><small> &deg;C</small></div>
+ <div class="sub">Target <b id="ts">--</b> &deg;C &middot; Humidity <b id="h">--</b> %</div>
+ <div class="stats">
+  <div><b id="hp">0%</b><span>Heater</span></div>
+  <div><b id="fn">Off</b><span>Fan</span></div>
+  <div><b id="tl">--</b><span>Time left</span></div>
+ </div>
+ <div class="sens" id="sn"></div>
 </section>
-<div class="two">
- <section class="card" id="c1"><div class="lbl">DHT22 #1</div><div class="v"><span id="t1">--</span> &deg;C</div><div><span id="h1">--</span> %</div></section>
- <section class="card" id="c2"><div class="lbl">DHT22 #2</div><div class="v"><span id="t2">--</span> &deg;C</div><div><span id="h2">--</span> %</div></section>
-</div>
 <section class="card" id="msg" hidden></section>
 <section class="card">
- <label>Target temperature (40&ndash;80 &deg;C)<input id="fs" type="number" min="40" max="80" step="1" inputmode="numeric"></label>
- <label>Drying time (minutes)<input id="fm" type="number" min="1" max="1440" step="1" inputmode="numeric"></label>
- <div class="btns"><button id="go">Start</button><button id="stop">Stop</button></div>
+ <div class="row">
+  <label>Target &deg;C<input id="fs" type="number" min="40" max="80" step="1" inputmode="numeric"></label>
+  <label>Minutes<input id="fm" type="number" min="1" max="1440" step="1" inputmode="numeric"></label>
+ </div>
+ <div class="row btns"><button id="go">Start</button><button id="stop">Stop</button></div>
+ <div class="fan"><span>Fan</span><button data-m="auto">Auto</button><button data-m="on">On</button><button data-m="off">Off</button></div>
 </section>
-<footer id="fw"></footer>
 </main>
 <script>
 'use strict';
 const $=i=>document.getElementById(i);
+const fanBtns=document.querySelectorAll('.fan button');
 let run=false,edit=0;
-const f1=v=>v==null?'--':v.toFixed(1);
+const one=v=>v==null?'--':v.toFixed(1);
 const hm=s=>{s=Math.max(0,s|0);return (s/3600|0)+'h '+String((s%3600)/60|0).padStart(2,'0')+'m'};
+const sensor=(n,t,h)=>'Sensor '+n+' '+(t==null?'offline':t.toFixed(1)+' \u00b0C \u00b7 '+h.toFixed(0)+' %');
 for(const i of['fs','fm'])$(i).oninput=()=>{edit=Date.now()};
 function show(d){
- $('st').textContent=d.state;$('st').className='pill '+d.state;
- $('t').textContent=f1(d.t);$('h').textContent=f1(d.h);$('ts').textContent=d.set;
- for(const n of[1,2]){$('t'+n).textContent=f1(d['t'+n]);$('h'+n).textContent=f1(d['h'+n]);
-  $('c'+n).classList.toggle('off',d['t'+n]==null)}
- $('hp').textContent=d.heat;$('hb').style.width=d.heat+'%';
- $('ph').textContent=d.phase=='HEAT-UP'?'\u00b7 heating up':d.phase=='HOLD'?'\u00b7 holding':'';
- $('tm').textContent=d.state=='RUNNING'?hm(d.left)+' left of '+hm(d.min*60)
-  :d.state=='IDLE'?'Set the target and time, then Start':'';
+ $('st').textContent=d.state;$('st').className=d.state;
+ $('t').textContent=one(d.t);$('ts').textContent=d.set;$('h').textContent=d.h==null?'--':d.h.toFixed(0);
+ $('hp').textContent=d.heat+'%';$('fn').textContent=d.fan?'On':'Off';
+ $('tl').textContent=d.state=='RUNNING'?hm(d.left):'--';
+ $('sn').textContent=sensor(1,d.t1,d.h1)+'  |  '+sensor(2,d.t2,d.h2);
  $('msg').hidden=!d.msg;$('msg').textContent=d.msg;
  run=d.state=='RUNNING';$('go').textContent=run?'Update':'Start';
+ for(const b of fanBtns)b.classList.toggle('on',b.dataset.m==d.fanMode.toLowerCase());
  if(Date.now()-edit>8000){$('fs').value=d.set;$('fm').value=d.min}
- $('fw').textContent=d.fw;
 }
 async function poll(){
  try{const r=await fetch('api',{cache:'no-store'});show(await r.json())}
- catch(e){$('st').textContent='OFFLINE';$('st').className='pill FAULT'}
+ catch(e){$('st').textContent='OFFLINE';$('st').className='FAULT'}
 }
 async function post(p){
- try{const r=await fetch(p,{method:'POST'});const t=await r.text();if(!r.ok)alert(t)}
+ try{const r=await fetch(p,{method:'POST'});if(!r.ok)alert(await r.text())}
  catch(e){alert('Dryer not reachable')}
  edit=0;poll();
 }
 $('go').onclick=()=>post((run?'set':'start')+'?set='+encodeURIComponent($('fs').value)
  +'&min='+encodeURIComponent($('fm').value));
 $('stop').onclick=()=>post('stop');
+for(const b of fanBtns)b.onclick=()=>post('fan?mode='+b.dataset.m);
 poll();setInterval(poll,2000);
 </script></body></html>)HTML";
 
@@ -462,7 +486,7 @@ static void handleApi() {
   uint32_t el = (state == RUNNING || state == FAULT) ? elapsedS
               : (state == DONE) ? total : 0;
   String o;
-  o.reserve(300);
+  o.reserve(320);
   o += "{\"state\":\"";  o += STATE_NAME[state];
   o += "\",\"phase\":\"";
   o += (state == RUNNING) ? (holding ? "HOLD" : "HEAT-UP") : "";
@@ -478,7 +502,9 @@ static void handleApi() {
   o += ",\"el\":";   o += (unsigned long)el;
   o += ",\"left\":"; o += (unsigned long)(el < total ? total - el : 0);
   o += ",\"heat\":"; o += (unsigned long)heatPct;
-  o += ",\"msg\":\""; o += msg;
+  o += ",\"fan\":";  o += fanOn ? "1" : "0";
+  o += ",\"fanMode\":\""; o += FAN_MODE_NAME[fanMode];
+  o += "\",\"msg\":\""; o += msg;
   o += "\",\"fw\":\"" FW_NAME "\"}";
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json", o);
@@ -502,22 +528,34 @@ static void setupWeb() {
     stopCycle();
     server.send(200, "text/plain", "Stopped");
   });
+  server.on("/fan", HTTP_POST, [] {                  // ?mode=auto | on | off
+    String m = server.arg("mode");
+    if (m == "auto")     fanMode = FAN_MODE_AUTO;
+    else if (m == "on")  fanMode = FAN_MODE_ON;
+    else if (m == "off") fanMode = FAN_MODE_OFF;
+    else { server.send(400, "text/plain", "mode must be auto, on or off"); return; }
+    Serial.printf("[fan] mode %s\n", FAN_MODE_NAME[fanMode]);
+    fanControl();
+    server.send(200, "text/plain", FAN_MODE_NAME[fanMode]);
+  });
   server.onNotFound([] { server.send(404, "text/plain", "Not found"); });
   server.begin();
 }
 
 // =================================================================== MAIN
 void setup() {
-  pinMode(PIN_BTS_EN, OUTPUT);              // heater OFF before anything else
+  pinMode(PIN_BTS_EN, OUTPUT);              // heater + fan OFF before anything
   digitalWrite(PIN_BTS_EN, LOW);
   pinMode(PIN_BTS_RPWM, OUTPUT);
   digitalWrite(PIN_BTS_RPWM, LOW);
+  pinMode(PIN_FAN_EN, OUTPUT);
+  digitalWrite(PIN_FAN_EN, !FAN_ON_LEVEL);
   pwmBegin();
   heater(0);
 
   Serial.begin(115200);
   delay(50);
-  Serial.printf("\n%s - ESP32 Dev + 2x DHT22 + BTS7960 (via 555)\n", FW_NAME);
+  Serial.printf("\n%s - ESP32 Dev + 2x DHT22 + BTS7960 (via 555) + fan\n", FW_NAME);
 
   pinMode(PIN_DHT1, OUTPUT_OPEN_DRAIN | PULLUP);   // idle HIGH (released)
   digitalWrite(PIN_DHT1, HIGH);
@@ -530,8 +568,9 @@ void setup() {
   if (!WiFi.softAP(AP_SSID, AP_PASS, 6, 0, 4)) Serial.println("[wifi] hotspot FAILED");
   setupWeb();
 
-  Serial.printf("heater: RPWM GPIO%d (%d Hz, max %d %%) EN GPIO%d | DHT22: GPIO%d + GPIO%d\n",
-                PIN_BTS_RPWM, HEATER_PWM_HZ, HEATER_MAX_PCT, PIN_BTS_EN, PIN_DHT1, PIN_DHT2);
+  Serial.printf("heater: RPWM GPIO%d (%d Hz, max %d %%) EN GPIO%d | fan EN GPIO%d | "
+                "DHT22: GPIO%d + GPIO%d\n", PIN_BTS_RPWM, HEATER_PWM_HZ, HEATER_MAX_PCT,
+                PIN_BTS_EN, PIN_FAN_EN, PIN_DHT1, PIN_DHT2);
   Serial.printf("target %d C, %u min | WiFi \"%s\" / \"%s\" -> http://%s\n", setC,
                 (unsigned)minutes, AP_SSID, AP_PASS, WiFi.softAPIP().toString().c_str());
   lastRead = millis();                      // first read after READ_MS (sensor warm-up)
@@ -549,9 +588,10 @@ void loop() {
   }
   if (now - lastLog >= LOG_MS) {
     lastLog = now;
-    Serial.printf("[%s] t=%.1f C (%.1f / %.1f) h=%.1f %% target=%d heat=%u %% %s\n",
-                  STATE_NAME[state], avgT(), dht1.ok ? dht1.t : NAN,
-                  dht2.ok ? dht2.t : NAN, avgH(), setC, (unsigned)heatPct, msg);
+    Serial.printf("[%s] t=%.1f C (%.1f / %.1f) h=%.1f %% target=%d heat=%u %% fan=%s(%s) %s\n",
+                  STATE_NAME[state], avgT(), dht1.ok ? dht1.t : NAN, dht2.ok ? dht2.t : NAN,
+                  avgH(), setC, (unsigned)heatPct, fanOn ? "on" : "off",
+                  FAN_MODE_NAME[fanMode], msg);
   }
   delay(1);
 }

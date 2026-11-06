@@ -78,43 +78,6 @@ Firmware ships as one file: `arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DE
     date, so `git diff --exit-code` was never clean. A copy whose code is
     unchanged now keeps its date byte-for-byte; the date only moves when
     the code does. (Pre-existing; CI exposed it once it ran the gate.)
-- **`arduino-ide/s3_T1/s3_T1.ino`**: the owner's named copy of the S3
-  single-file sketch, byte-identical to v2.0.23. It is a snapshot: later
-  firmware changes land in `SMART-DEHUMIDIFIER-s3-single-file.ino`.
-  - `compile-sketches.sh` builds it with the S3 settings, so the exact file
-    being flashed is proven; the build is skipped if the folder is deleted.
-  - The compile job also posts a one-line `N builds OK / N failed` notice
-    on the run page.
-- **`arduino-ide/esp32_T1/esp32_T1.ino` — minimal build**: ESP32 Dev + 2× DHT22
-  + BTS7960 through the 555, nothing else (no AHT10/scale/keypad/displays/RTC/
-  logs/door/relays/battery/buzzer/buttons/fan/OTA/online UI). One file, no
-  libraries.
-  - Same wiring as the full build for the heater (GPIO 25 → 555 pin 4 →
-    RPWM, GPIO 26 → R_EN + L_EN, LPWM → GND, 1 kHz); DHT22 on GPIO 32 / 33.
-  - Hotspot `AgarbattiDryer` + one royal-blue / golden-brown page: live
-    readings, target (40–80 °C) + time (1–1440 min), Start / Update / Stop.
-    Target and time survive power cuts; a cycle never auto-resumes.
-  - Control: full power to target − 1.5 °C, then PID (Kp 10, Kd 5 as the
-    full firmware; **Ki 0.05** instead of 0.2 — with DHT22-only sensing the
-    old Ki oscillated by 4–9 °C in 9 of 72 simulated plants; 0.05 holds all
-    72 within ±0.2 °C). Integral frozen, not reset, during full-power phases.
-  - Safety: heater off at boot / idle / any fault; hard cut at 90 °C on the
-    hottest sensor (DHT22 is rated to 80 °C); Start refused above 85 °C;
-    one sensor lost = warning, both lost = heater off at once + fault after
-    15 s; heater watchdog in sliding 3-min windows (the full firmware's
-    window never re-armed, so a coil dying late in the heat-up went unseen).
-  - DHT22 read syncs on the sensor's edges (datasheet: answers 20–200 µs
-    after release) inside a 4 ms critical section, line kept open-drain.
-- **`tools/esp32-t1-test`** (check-all step 4): the real sketch against a mock
-  core with bit-exact DHT22 emulators and a 500 W chamber model — boot
-  safety, 63 protocol timings, a full 120-min cycle, 72 plant × target
-  combinations, hard cut, sensor loss, dead heater, settings + reboot,
-  micros()/millis() rollover, `/api` JSON schema; core 3.x and 2.x LEDC APIs.
-  `tools/ui-test/t1-test.js` (step 5) checks the page in every state.
-  `tools/preview/serve.js` serves it at **/t1/** (simulated, ×30).
-- Known issue found by that emulator (full firmware, unchanged here):
-  `src/dht.cpp` waits a fixed 30 µs after the start pulse, so a DHT22 / DHT11
-  that answers later than ~30–35 µs is never read.
 - `FW_VERSION` 2.0.23.
 
 ## 2026-09 (v2.0.22 — sources restored, every sketch compiled for real)
