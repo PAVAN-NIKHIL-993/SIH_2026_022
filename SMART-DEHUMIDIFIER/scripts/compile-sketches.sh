@@ -7,7 +7,7 @@
 # Usage (from anywhere in the repo; needs arduino-cli on PATH -
 # https://arduino.github.io/arduino-cli/latest/installation/):
 #   bash scripts/compile-sketches.sh esp32  # firmware classic + S3 (+ S3 in DRYER_RTOS=1
-#                                           # mode), S3 bench sketches
+#                                           # mode), s3_T1, esp32_T1, S3 bench sketches
 #   bash scripts/compile-sketches.sh avr    # UNO display bridge + display test
 #   bash scripts/compile-sketches.sh        # both groups
 #   bash scripts/compile-sketches.sh esp32 --setup-only   # install, no build
@@ -97,6 +97,8 @@ if [ "$group" != avr ] && ! $setup_only; then
   # single-file sketch) - built too, so the exact file being flashed is
   # proven; skipped once the folder is deleted
   if [ -d arduino-ide/s3_T1 ]; then build "$FQBN_S3" arduino-ide/s3_T1; fi
+  # esp32_T1: the minimal ESP32 Dev + 2x DHT22 + BTS7960 build (classic only)
+  if [ -d arduino-ide/esp32_T1 ]; then build "$FQBN_CLASSIC" arduino-ide/esp32_T1; fi
   build "$FQBN_S3"      arduino-ide/board-test-s3
   for d in arduino-ide/sensor-tests/*/; do build "$FQBN_S3" "${d%/}"; done
 fi

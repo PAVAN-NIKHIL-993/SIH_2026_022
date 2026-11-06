@@ -272,6 +272,13 @@ pio device monitor      # serial console @115200
 (board *ESP32 Dev Module*) or the S3 one (board *ESP32S3 Dev Module*, USB
 CDC On Boot: Enabled) → Upload. No libraries to install — core built-ins only.
 
+**Minimal build — only an ESP32 Dev, two DHT22 and the BTS7960 (through the
+555):** flash `arduino-ide/esp32_T1/esp32_T1.ino` (board *ESP32 Dev Module*).
+One file, no libraries: hotspot + one web page (live readings, target + time,
+Start / Update / Stop), heat-up + PID, hard cut at 90 °C, sensor-loss and
+heater watchdogs. Wiring is in the file header: GPIO 25 → 555 pin 4
+(555 pin 3 → RPWM), GPIO 26 → R_EN + L_EN, DHT22 on GPIO 32 and 33.
+
 ## Project layout
 
 ```
@@ -280,6 +287,7 @@ SMART-DEHUMIDIFIER/
 │     SMART-DEHUMIDIFIER-single-file.ino                  classic ESP32 DevKit V1
 │     SMART-DEHUMIDIFIER-s3-single-file.ino               ESP32-S3 variant (recommended)
 │     s3_T1/s3_T1.ino                                     same S3 code, owner's named copy (v2.0.23)
+│     esp32_T1/esp32_T1.ino                               MINIMAL: ESP32 Dev + 2x DHT22 + BTS7960, web page
 ├── variants/esp32-s3/                          S3 pin map + config + why-S3 README
 ├── src/ + platformio.ini                       shared logic, PlatformIO layout
 │     config.h (all pins/defaults) · main.cpp · control · sensors · aht10 ×2
@@ -301,9 +309,10 @@ SMART-DEHUMIDIFIER/
 ├── tools/                  single-file assembler · online-UI sync ·
 │                           string/printf verifiers · symbol audit ·
 │                           host DS1307 test · sensor-page JSON test ·
-│                           UI test suites (jsdom) · preview server
+│                           UI test suites (jsdom) · preview server ·
+│                           esp32_T1 host test (DHT22 emulator + chamber model)
 ├── scripts/check-all.sh    one-command release gate (same as CI)
-├── scripts/compile-sketches.sh  real arduino-cli build of all 16 sketches (CI)
+├── scripts/compile-sketches.sh  real arduino-cli build of all 17 sketches (CI)
 ├── ../.github/workflows/   CI (gate + real compile) · Pages deploy
 ├── CHANGELOG.md            release history
 └── ADVANCED-IDEAS.txt      the original idea vault

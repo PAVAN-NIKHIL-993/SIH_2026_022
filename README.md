@@ -252,6 +252,8 @@ controller bay at the top, chamber between — nothing outside except the panel.
    **ESP32 Dev Module**) · S3 → `SMART-DEHUMIDIFIER-s3-single-file.ino` or its
    identical named copy `arduino-ide/s3_T1/s3_T1.ino` (board
    **ESP32S3 Dev Module**, **USB CDC On Boot: Enabled**).
+   Minimal build (ESP32 Dev + 2× DHT22 + BTS7960 via the 555, nothing else):
+   `arduino-ide/esp32_T1/esp32_T1.ino` (board **ESP32 Dev Module**).
 3. Upload (hold BOOT if it hangs on "Connecting…"). Serial monitor 115200.
 4. Join WiFi **AgarbattiDryer** / **dryer1234** → http://192.168.4.1.
 5. **Parameters → ↳ Reset all to defaults** once (Settings v6 migration).
@@ -334,7 +336,7 @@ Full symptom→cause→fix table: manual 05.
 │   │                           host DS1307 test · sensor-page JSON test · UI suites
 │   └── scripts/                check-all.sh = one-command release gate ·
 │                               compile-sketches.sh = real arduino-cli build
-├── .github/workflows/          CI (gate + real compile of all 16 sketches) · Pages deploy
+├── .github/workflows/          CI (gate + real compile of all 17 sketches) · Pages deploy
 └── CONTRIBUTING · SECURITY · CHANGELOG · LICENSE (MIT)
 ```
 

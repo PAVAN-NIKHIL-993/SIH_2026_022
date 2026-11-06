@@ -6,6 +6,7 @@
 //      http://localhost:8080/display     kiosk page  (DISPLAY_HTML)
 //      http://localhost:8080/online      online UI through the ESP bridge page
 //      http://localhost:8080/docs/       online UI (docs/index.html) directly
+//      http://localhost:8080/t1/         esp32_T1 minimal build (ESP32 Dev + 2x DHT22)
 //
 // The pages are read straight from src/webui.h on every request (edit ->
 // refresh) and served exactly as the firmware serves them. /api/* returns a
@@ -103,6 +104,67 @@ const CYCLES = [
     reason: 'stopped', setTemp: 80, dryMin: 120, elapsedMin: 92.2, remainMin: 27.8, note: 'user stopped' },
 ];
 
+// ---- esp32_T1 (minimal build: ESP32 Dev + 2x DHT22 + BTS7960) at /t1/ ----
+// The page straight from arduino-ide/esp32_T1/esp32_T1.ino; a simulated
+// 500 W chamber with the sketch's control law (full power to target-1.5 C,
+// then PI), sped up x30 so a heat-up takes ~30 s on screen.
+const T1_SPEED = 30;
+const t1 = { state: 'IDLE', set: 60, min: 120, sim: 0, start: 0, T: 31, s1: 31, s2: 31,
+             heat: 0, holding: false, integ: 0, lastE: 0, msg: '', wall: Date.now() };
+
+function t1Page() {
+  const src = fs.readFileSync(path.join(ROOT, 'arduino-ide', 'esp32_T1', 'esp32_T1.ino'), 'utf8');
+  return src.split('R"HTML(')[1].split(')HTML"')[0];
+}
+
+function t1Advance() {
+  const now = Date.now();
+  let dt = Math.min(900, (now - t1.wall) / 1000 * T1_SPEED);   // cap long pauses
+  t1.wall = now;
+  while (dt > 0) {
+    const h = Math.min(dt, 2.5);
+    dt -= h; t1.sim += h;
+    if (t1.state === 'RUNNING') {
+      const t = (t1.s1 + t1.s2) / 2, e = t1.set - t;
+      if (t1.holding && e > 5) t1.holding = false;
+      let out = 100;
+      if (t1.holding || e <= 1.5) {
+        t1.holding = true;
+        t1.integ = Math.max(-20, Math.min(100, t1.integ + 0.05 * e * h));
+        out = Math.max(0, Math.min(100, 10 * e + t1.integ + 5 * (e - t1.lastE) / h));
+      }
+      t1.lastE = e;
+      t1.heat = Math.round(out);
+      if (t1.sim - t1.start >= t1.min * 60) {
+        t1.state = 'DONE'; t1.heat = 0; t1.msg = `Done - ${t1.min} min completed`;
+      }
+    } else t1.heat = 0;
+    t1.T += h * (5 * t1.heat - 5 * (t1.T - 30)) / 12000;      // 5 W per heater %
+    const a = h / (20 + h);
+    t1.s1 += a * (t1.T + 0.8 - t1.s1);
+    t1.s2 += a * (t1.T - 0.8 - t1.s2);
+  }
+}
+
+function t1Api() {
+  t1Advance();
+  const r1 = (x) => Math.round(x * 10) / 10;
+  const rh = (s) => r1(Math.max(8, Math.min(95, 85 - 1.1 * (s - 30))));
+  const total = t1.min * 60;
+  const el = t1.state === 'RUNNING' ? Math.floor(t1.sim - t1.start) : t1.state === 'DONE' ? total : 0;
+  return { state: t1.state, phase: t1.state === 'RUNNING' ? (t1.holding ? 'HOLD' : 'HEAT-UP') : '',
+    t: r1((t1.s1 + t1.s2) / 2), h: r1((rh(t1.s1) + rh(t1.s2)) / 2),
+    t1: r1(t1.s1), h1: rh(t1.s1), t2: r1(t1.s2), h2: rh(t1.s2),
+    set: t1.set, min: t1.min, el, left: Math.max(0, total - el), heat: t1.heat, msg: t1.msg,
+    fw: 'esp32_T1 v1.0 - preview, simulated x30' };
+}
+
+function t1Args(url) {
+  const s = parseInt(url.searchParams.get('set'), 10), m = parseInt(url.searchParams.get('min'), 10);
+  if (s > 0) t1.set = Math.max(40, Math.min(80, s));
+  if (m > 0) t1.min = Math.max(1, Math.min(1440, m));
+}
+
 function send(res, code, type, body) {
   res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store',
                         'Access-Control-Allow-Origin': '*' });
@@ -116,6 +178,23 @@ http.createServer((req, res) => {
   req.on('data', (c) => { body += c; });
   req.on('end', () => {
     try {
+      if (p === '/t1') { res.writeHead(302, { Location: '/t1/' }); return res.end(); }
+      if (p === '/t1/') return send(res, 200, 'text/html; charset=utf-8', t1Page());
+      if (p === '/t1/api') return send(res, 200, 'application/json', JSON.stringify(t1Api()));
+      if (req.method === 'POST' && p.startsWith('/t1/')) {
+        t1Advance();
+        if (p === '/t1/start') {
+          t1Args(url);
+          if (t1.state === 'RUNNING') return send(res, 200, 'text/plain', 'Already running - settings saved');
+          Object.assign(t1, { state: 'RUNNING', start: t1.sim, holding: false, integ: 0, lastE: 0, msg: '' });
+          return send(res, 200, 'text/plain', 'Started');
+        }
+        if (p === '/t1/set') { t1Args(url); return send(res, 200, 'text/plain', 'Saved'); }
+        if (p === '/t1/stop') {
+          Object.assign(t1, { state: 'IDLE', heat: 0, msg: '' });
+          return send(res, 200, 'text/plain', 'Stopped');
+        }
+      }
       const P = pages();
       if (p === '/') return send(res, 200, 'text/html; charset=utf-8', P.INDEX_HTML);
       if (p === '/display') return send(res, 200, 'text/html; charset=utf-8', P.DISPLAY_HTML);
@@ -144,5 +223,5 @@ http.createServer((req, res) => {
     }
   });
 }).listen(PORT, '0.0.0.0', () => {
-  console.log(`dryer UI preview: http://localhost:${PORT}/  (/display, /online, /docs/)`);
+  console.log(`dryer UI preview: http://localhost:${PORT}/  (/display, /online, /docs/, /t1/)`);
 });
