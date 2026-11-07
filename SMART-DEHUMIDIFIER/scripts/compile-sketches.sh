@@ -87,14 +87,7 @@ if [ "$group" != avr ]; then
   gh_endgroup
 fi
 if [ "$group" != avr ] && ! $setup_only; then
-  build "$FQBN_CLASSIC" arduino-ide/SMART-DEHUMIDIFIER-single-file
-  build "$FQBN_S3"      arduino-ide/SMART-DEHUMIDIFIER-s3-single-file
-  # the optional FreeRTOS build mode (config.h: DRYER_RTOS, #ifndef-guarded).
-  # compiler.cpp.extra_flags is empty in the core; build.extra_flags is not
-  # (it carries the S3 USB settings), so it must not be overridden
-  build "$FQBN_S3"      arduino-ide/SMART-DEHUMIDIFIER-s3-single-file "compiler.cpp.extra_flags=-DDRYER_RTOS=1"
-  build "$FQBN_S3"      arduino-ide/board-test-s3
-  for d in arduino-ide/sensor-tests/*/; do build "$FQBN_S3" "${d%/}"; done
+  build "$FQBN_CLASSIC" arduino-ide/esp32_T1   # TEMPORARY: real-compiler check of esp32_T1 only (reverted next commit)
 fi
 
 if [ "$group" != esp32 ]; then
