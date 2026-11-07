@@ -31,6 +31,18 @@ const outFile = variant === 's3' ? 'SMART-DEHUMIDIFIER-s3-single-file.ino' : 'SM
 const mcuLine = variant === 's3'
   ? ' *  VARIANT: ESP32-S3  (board "ESP32S3 Dev Module", USB CDC On Boot: Enabled)'
   : ' *  VARIANT: classic ESP32 DevKit V1  (board "ESP32 Dev Module")';
+// HOW TO FLASH steps 2-3 differ per board (the S3 copy used to tell S3 owners
+// to pick the classic "ESP32 Dev Module"). S3 settings = variants/esp32-s3/
+// README.md "Board settings" = the CI build (FlashSize=16M, PSRAM=disabled).
+const boardSteps = variant === 's3'
+  ? ' *    2. Tools -> Board -> esp32 -> "ESP32S3 Dev Module", then in Tools:\n' +
+    ' *       USB CDC On Boot: Enabled  (Serial Monitor over the USB-C port)\n' +
+    ' *       Flash Size: 16MB (8MB on an N8)  PSRAM: Disabled (never used -\n' +
+    ' *       fine on an N16R8 too; GPIO 35/36/37 stay untouched)\n' +
+    ' *    3. Plug the S3 in with a USB DATA cable - the USB-C port labelled\n' +
+    ' *       USB (native). Tools -> Port -> select it.'
+  : ' *    2. Tools -> Board -> esp32 -> "ESP32 Dev Module".\n' +
+    ' *    3. Plug the ESP32 with a USB DATA cable. Tools -> Port -> select it.';
 
 // local headers whose #include lines get stripped (order provides them)
 const localHeaders = new Set([
@@ -82,9 +94,6 @@ const pinRows = [
   ['PIN_DHT22_CHAMBER', 'DHT22 chamber sensor (cool-return path)'],
   ['PIN_DHT11_OUT', 'DHT11 outdoor sensor (shade!)'],
   ['PIN_PIXEL', 'RGB status pixel (on-board WS2812; 48=v1.0 boards, 38=v1.1)'],
-  ['PIN_RTC_RST', 'DS1302 RTC RST (chip enable) - date & time, coin-cell'],
-  ['PIN_RTC_SCLK', 'DS1302 RTC SCLK'],
-  ['PIN_RTC_IO', 'DS1302 RTC data I/O'],
   ['PIN_TFT_SCK', 'ILI9488 TFT SCK'],
   ['PIN_TFT_MOSI', 'ILI9488 TFT MOSI'],
   ['PIN_TFT_CS', 'ILI9488 TFT CS'],
@@ -101,7 +110,11 @@ const gated = {
   PIN_DHT22_CHAMBER: 'DHT_CHAMBER_ENABLED',
   PIN_DHT11_OUT: 'DHT_OUT_ENABLED',
   PIN_PIXEL: 'PIXEL_ENABLED',
-  PIN_RTC_RST: 'RTC_ENABLED', PIN_RTC_SCLK: 'RTC_ENABLED', PIN_RTC_IO: 'RTC_ENABLED',
+  // TFT off on both variants: its placeholder pins overlap live ones on the
+  // S3 (41 = DHT11, 48 = status pixel), so listing them read as a conflict
+  PIN_TFT_SCK: 'DISPLAY_ENABLED', PIN_TFT_MOSI: 'DISPLAY_ENABLED',
+  PIN_TFT_CS: 'DISPLAY_ENABLED', PIN_TFT_DC: 'DISPLAY_ENABLED',
+  PIN_TFT_RST: 'DISPLAY_ENABLED',
 };
 let pinRef = '';
 for (const [macro, desc] of pinRows) {
@@ -112,11 +125,13 @@ for (const [macro, desc] of pinRows) {
 pinRef += ' *\n';
 const notes = [];
 if (defs.SCALE_ENABLED === 0) notes.push('weigh scale OFF on this variant (config: SCALE_ENABLED)');
+if (defs.DISPLAY_ENABLED === 0) notes.push('ILI9488 TFT OFF on this variant (config: DISPLAY_ENABLED) - the /display web page replaces it');
 if (defs.DOOR_ENABLED === 0) notes.push('door hardware OFF - the calibrate->load->ready workflow runs in software');
 if (defs.DOOR_ENABLED === 1 && defs.DOOR_LOCK_ENABLED === 0) notes.push('door = LIMIT SWITCH ONLY (no lock): start gated in software, mid-cycle open = FAULT');
 if (defs.SUPPLY_RELAYS_ENABLED === 0) notes.push('supply relay not wired - mode shown + opto verified, switching is manual');
 if (defs.BTN_ENABLED === 1) notes.push('BOOT button = start/stop, hold 2 s = power on');
 notes.push(`keypad PCF8574 at 0x${(defs.KEYPAD_ADDR || 0x20).toString(16).toUpperCase()} (never PCF8574A - AHT10 clash)`);
+if (defs.RTC_ENABLED === 1) notes.push(`DS1307 RTC on I2C0 (SDA ${defs.PIN_I2C0_SDA} / SCL ${defs.PIN_I2C0_SCL}) at 0x${(defs.RTC_I2C_ADDR || 0x68).toString(16).toUpperCase()}, VCC 5 V - remove its 5 V pull-ups (R2/R3)`);
 for (const n of notes) pinRef += ` *    NOTE: ${n}\n`;
 
 const banner = `/*
@@ -131,8 +146,7 @@ ${mcuLine}
  *  ARDUINO IDE 2 - HOW TO FLASH (no libraries needed, seriously):
  *    1. Boards Manager (icon left) -> search "esp32" -> install
  *       "esp32 by Espressif Systems".
- *    2. Tools -> Board -> esp32 -> "ESP32 Dev Module".
- *    3. Plug the ESP32 with a USB DATA cable. Tools -> Port -> select it.
+${boardSteps}
  *    4. Click Upload (->). If it hangs on "Connecting...", hold the BOOT
  *       button on the ESP32 until "Writing..." starts, then release.
  *    5. Serial Monitor at 115200 shows the boot log.
@@ -233,6 +247,20 @@ for (let i = 0; i < 3; i++) {                 // converge: marker states its own
 const dest = path.join(root, 'arduino-ide', outDir);
 fs.mkdirSync(dest, { recursive: true });
 const file = path.join(dest, outFile);
+// Idempotent output: the build date only moves when the code does.
+// check-all step 6 (and CI on every push) regenerates the sketches and then
+// requires `git diff --exit-code` to be clean - with a fresh date on every run
+// that failed on any day after the copy was committed. An existing copy that
+// differs ONLY in its "build YYYY-MM-DD" line is therefore kept byte-for-byte.
+const STAMP_RE = /^ \* build \d{4}-\d{2}-\d{2} - if these numbers differ from what you see,$/m;
+const unstamp = (s) => s.replace(STAMP_RE, ' * build <date>');
+const prev = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+let kept = false;
+if (prev !== null && prev !== final && unstamp(prev) === unstamp(final)) {
+  final = prev;                               // same code - keep its original date
+  kept = true;
+}
 fs.writeFileSync(file, final);
 console.log('written', file, (final.length / 1024).toFixed(1) + 'KB,',
-            lines, 'lines (wc -l),', nonBlank, 'non-blank');
+            lines, 'lines (wc -l),', nonBlank, 'non-blank' +
+            (kept ? ' (code unchanged - build date kept)' : ''));

@@ -21,7 +21,8 @@
 | 21 | door limit switch (other leg GND, closed = LOW) |
 | 41 | DHT11 DATA (outdoor) |
 | 48 | on-board RGB status pixel (WS2812 data, SPI-driven) |
-| 3, 11 | spare — **parked pull-down at boot** (v2.0.18) — 40/42/47 went to the DS1302 RTC in v2.0.21 |
+| 3, 11, 40, 42, 47 | spare — **parked pull-down at boot** (v2.0.18; 40/42/47 free again since the RTC moved to I2C in v2.0.23) |
+| 8 / 9 | I2C0 — AHT10 + PCF keypad + AT24C256 + **DS1307 RTC (0x68, VCC 5 V)** |
 
 Unused pads (the spare set above) are set `INPUT_PULLDOWN` at boot —
 disabled, never floating, lower power. Never parked: 35/36/37 (R8 PSRAM

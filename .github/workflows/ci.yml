@@ -1,35 +1,83 @@
-# CI: every push runs the full quality gate (same as scripts/check-all.sh)
+# CI - runs on every push and pull request:
+#   checks  : the full quality gate, scripts/check-all.sh (regenerate sketches +
+#             online UI, string/printf scans, symbol audit, host DS1302 driver
+#             test, jsdom UI suites, generated files committed in sync)
+#   compile : a REAL arduino-cli build of every sketch, scripts/compile-sketches.sh
+#             (firmware for classic ESP32 + ESP32-S3, S3 bench sketches, UNO
+#             display sketches) - each broken sketch gets one annotation with
+#             its first error (pinned to the line) + the key log lines
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   checks:
+    name: quality gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.x' }
-      - name: Regenerate sketches (both variants) + online UI
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+      - name: scripts/check-all.sh
+        run: bash SMART-DEHUMIDIFIER/scripts/check-all.sh
+
+  compile:
+    name: compile (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [esp32, avr]
+    env:
+      ARDUINO_CLI_VERSION: 1.5.1
+    steps:
+      - uses: actions/checkout@v7
+      - name: Cache key = the toolchain versions pinned in compile-sketches.sh
+        id: pins
         run: |
-          cd SMART-DEHUMIDIFIER
-          node tools/single-file/assemble.js
-          node tools/single-file/assemble.js s3
-          node tools/online/sync-online.js
-      - name: String + printf scans
+          pins=$(grep -E '^(ESP32_CORE|AVR_CORE|ESP32_INDEX|AVR_LIBS)=' SMART-DEHUMIDIFIER/scripts/compile-sketches.sh | sha256sum | cut -c1-16)
+          echo "key=arduino-${{ matrix.group }}-cli${ARDUINO_CLI_VERSION}-${pins}" >> "$GITHUB_OUTPUT"
+      - name: Restore Arduino cores + libraries
+        id: cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.arduino15
+            !~/.arduino15/staging
+            ~/Arduino/libraries
+          key: ${{ steps.pins.outputs.key }}
+      - name: Install arduino-cli ${{ env.ARDUINO_CLI_VERSION }}
         run: |
-          cd SMART-DEHUMIDIFIER
-          python3 tools/verify_strings.py arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DEHUMIDIFIER-single-file.ino arduino-ide/SMART-DEHUMIDIFIER-s3-single-file/SMART-DEHUMIDIFIER-s3-single-file.ino src/*.cpp src/*.h variants/esp32-s3/config-s3.h
-          python3 tools/verify_strings.py --printf arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DEHUMIDIFIER-single-file.ino arduino-ide/SMART-DEHUMIDIFIER-s3-single-file/SMART-DEHUMIDIFIER-s3-single-file.ino src/*.cpp
-      - name: UI test suites
-        run: |
-          cd SMART-DEHUMIDIFIER/tools/ui-test
-          npm install --no-audit --no-fund
-          node ui-test.js
-          node online-test.js
-      - name: Generated files must be committed in sync
-        run: |
-          cd SMART-DEHUMIDIFIER
-          git diff --exit-code -- arduino-ide docs/index.html
+          mkdir -p "$RUNNER_TEMP/arduino-cli"
+          curl -fsSL "https://github.com/arduino/arduino-cli/releases/download/v${ARDUINO_CLI_VERSION}/arduino-cli_${ARDUINO_CLI_VERSION}_Linux_64bit.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP/arduino-cli" arduino-cli
+          echo "$RUNNER_TEMP/arduino-cli" >> "$GITHUB_PATH"
+      - name: Install cores + libraries
+        run: bash SMART-DEHUMIDIFIER/scripts/compile-sketches.sh ${{ matrix.group }} --setup-only
+      # saved right after setup, so a sketch that fails to compile does not
+      # make every following run re-download the ~1 GB ESP32 toolchain
+      - name: Save Arduino cores + libraries
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.arduino15
+            !~/.arduino15/staging
+            ~/Arduino/libraries
+          key: ${{ steps.pins.outputs.key }}
+      - name: scripts/compile-sketches.sh ${{ matrix.group }}
+        run: bash SMART-DEHUMIDIFIER/scripts/compile-sketches.sh ${{ matrix.group }}

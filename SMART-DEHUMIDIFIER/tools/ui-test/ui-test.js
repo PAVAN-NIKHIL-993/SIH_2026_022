@@ -53,8 +53,11 @@ const fakeStatus = () => ({
 
 const calls = [];
 const dom = new JSDOM(html, {
+  url: 'http://192.168.4.1/',            // a real origin -> localStorage works
   runScripts: 'dangerously',
   beforeParse(window) {
+    // a phone that saved the pre-v2.0.23 near-black default must NOT stay black
+    window.localStorage.setItem('dryerBg', JSON.stringify({ c: '#070b14', lines: true }));
     window.fetch = async (url, opts) => {
       calls.push(url + ' ' + (opts ? opts.method : 'GET'));
       let body = '{}';
@@ -209,8 +212,25 @@ setTimeout(async () => {
     check('fire tab class', $('tabDash').className.includes('fire'));
     check('water tab class', $('tabSet').className.includes('water'));
     check('background swatches rendered', $('bgSwatches').children.length === 6);
+    // v2.0.23 royal blue + golden brown theme
+    const body = window.document.body;
+    check('default theme = Royal & Gold', body.classList.contains('th-royal'));
+    check('old near-black saved background dropped', window.localStorage.getItem('dryerBg') === null &&
+      JSON.parse(window.localStorage.getItem('dryerTheme')).t === 'royal');
+    check('no near-black page background left', !html.includes('#070b14') && !dispHtml.includes('#0b1026'));
+    check('backdrop = royal blue sky + golden-brown horizon', html.includes('#1d48b8') && html.includes('#8a5a14') &&
+      html.includes('body::before'));
+    check('kiosk page on the royal/golden backdrop', dispHtml.includes('#1d48b8') && dispHtml.includes('#8a5a14'));
+    check('active swatch marked', window.document.querySelector('.bgsw.on') &&
+      window.document.querySelector('.bgsw.on').dataset.t === 'royal');
+    window.bgTheme('bronze');
+    check('preset theme applies + persists', body.classList.contains('th-bronze') && !body.classList.contains('th-royal') &&
+      JSON.parse(window.localStorage.getItem('dryerTheme')).t === 'bronze');
     window.bgApply('#0b1026', false);
-    check('background applied', window.document.body.style.getPropertyValue('--bg') === '#0b1026' && window.document.body.classList.contains('nolines'));
+    check('background applied', body.style.getPropertyValue('--bg') === '#0b1026' && body.classList.contains('nolines') &&
+      body.classList.contains('th-custom'));
+    check('mode presets styled as a segmented control', html.includes('.tabbtn.on{') && window.document.querySelector('[data-mdbtn].on') !== null);
+    check('weight card controls in their own grid', window.document.querySelector('.wtctl #calG') !== null);
 
     console.log(failures === 0 ? '\nALL UI TESTS PASSED' : `\n${failures} TESTS FAILED`);
     process.exit(failures === 0 ? 0 : 1);

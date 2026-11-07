@@ -31,7 +31,7 @@ Assembly sign-off: `02-ASSEMBLY-CHECKLIST.md` · Final tests: `03-QC-TEST-PROCED
 | ☐ | 11 | ~~Door solenoid lock~~ **not needed** — limit switch only (item 12) | — | ₹0 | optional later: DOOR_LOCK_ENABLED 1 + a free GPIO (3/11) |
 | ☐ | 12 | Limit switch (or reed contact) | 1 | 20–50 | S3: 21 (v2.0.20: was 34; → PCF#2 P6) |
 | ☐ | 12b | DHT11 outdoor sensor + 10 kΩ | 1 | 100–180 | GPIO 41 + 10 k pull-up DATA→3V3, shade (v2.0.20: was 33) |
-| ☐ | 12c | DS1302 RTC module (CR2032 coin cell) | 1 | 30–60 | S3: RST 40 / SCLK 42 / I-O 47, VCC→3V3, BZ unused (v2.0.21); auto-detected |
+| ☐ | 12c | DS1307 RTC module (coin cell, e.g. "Tiny RTC") | 1 | 40–80 | I2C: S3 SDA 8 / SCL 9 (classic 21/22) @ 0x68, **VCC→5V**, remove its 5 V pull-ups R2/R3 (v2.0.23); auto-detected |
 
 **Phase 1 subtotal ≈ ₹2,600–4,000.** Bench-check: flash the v2.0 sketch,
 `[diag]` self-test all OK, `/display` page shows live values, keypad navigates (serial echo).

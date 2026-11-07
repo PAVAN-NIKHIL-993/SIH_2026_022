@@ -6,7 +6,9 @@
  * SUMMARY of EVERY cycle (~817 slots, years of batches) that outlives any
  * filesystem reformat. Wiring: VCC->3V3, GND->GND, SDA/SCL on I2C0
  * (GPIO 8/9), A0/A1/A2->GND = address 0x50. Auto-detected at boot - no
- * chip, no problem (everything else works without it).
+ * chip, no problem (everything else works without it). v2.0.23: a smaller
+ * 24Cxx at 0x50 (e.g. the 4 kB AT24C32 on DS1307 "Tiny RTC" boards) is
+ * recognised and left alone instead of being corrupted as a 32 kB part.
  *
  * Layout: page 0 = header (magic, version, count, head, seq); records of
  * 40 bytes start at 64. Ring buffer: when full, the oldest summary is

@@ -1,4 +1,5 @@
 #include "sensors.h"
+#include "config.h"
 
 bool SensorModule::begin() {
   Wire.begin(PIN_I2C0_SDA, PIN_I2C0_SCL);
@@ -28,17 +29,6 @@ void SensorModule::update() {
 
 void SensorModule::recompute() {
   float tSum = 0, hSum = 0; int n = 0;
-  float tM = -300, hM = -300;
-  if (s1ok()) {
-    tSum += t1(); hSum += h1(); n++;
-    tM = max(tM, t1()); hM = max(hM, h1());
-  }
-  if (s2ok()) {
-    tSum += t2(); hSum += h2(); n++;
-    tM = max(tM, t2()); hM = max(hM, h2());
-  }
-  if (n > 0) {
-    _tAvg = tSum / n; _hAvg = hSum / n;
   float tM = -300, hM = -300;
   if (s1ok()) {
     tSum += t1(); hSum += h1(); n++;

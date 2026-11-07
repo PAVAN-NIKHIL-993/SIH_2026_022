@@ -121,10 +121,10 @@ Pin tables below are the CLASSIC build; the S3 map lives in the variant.
 | `PIN_POWER_HOLD` / `PIN_BTN1` / `PIN_BTN2` | 16/15/18 classic · 14/15/16 S3 | v2.0 power: latch hold, master button (3 s off / 10 s reboot), default-automation button |
 | `PIN_SOLAR_TOGGLE` / `PIN_SUPPLY_OPTO` / `PIN_SUPPLY_CH1/2` | 27/35/− classic · 39/**18**/6+7 S3 | supply selector: toggle, live-check, feed relay (opto on 18 = R8-safe, v2.0.13) |
 | `OTA_NETWORK_ENABLED` / `OTA_HOSTNAME` | **1** / "SMART-DEHUMIDIFIER" | Arduino-IDE network OTA over the dryer hotspot (website OTA at `/update` is always available too) |
-| `DISPLAY_ENABLED` / `TXDISP_ENABLED` | **0 / 0** | v2.0.7: the website is the display — `/` full control + `/display` kiosk page; TFT + UNO bridge compile out (3, 11 free; 40/42/47 = DS1302 RTC v2.0.21; 41 = DHT11, 48 = pixel) |
+| `DISPLAY_ENABLED` / `TXDISP_ENABLED` | **0 / 0** | v2.0.7: the website is the display — `/` full control + `/display` kiosk page; TFT + UNO bridge compile out (3, 11, 40, 42, 47 free — the RTC is on I2C since v2.0.23; 41 = DHT11, 48 = pixel) |
 | `SENS2_DHT` / `DHT_CHAMBER_ENABLED` / `PIN_DHT22_CHAMBER` / `DHT_CHAMBER_MS` | **1 / 1 / 10 / 3 s (S3)** | chamber source #2 = **DHT22 on the cool-return path** — averages, RH-peak and safety cut keep working with one AHT10 fewer (classic: 0 = 2× AHT10) |
 | `DHT_OUT_ENABLED` / `PIN_DHT11_OUT` / `DHT_READ_MS` | **1 / 41 / 10 s (S3)** | **DHT11 outdoor** (shade): real-time smart venting, web OUT line + weather card, CSV columns. GPIO 41 free (v2.0.20: moved off 33 — not broken out on many devkit headers) — works on N8 and N16R8 |
-| `RTC_ENABLED` / `PIN_RTC_RST` / `PIN_RTC_SCLK` / `PIN_RTC_IO` | **1 / 40 / 42 / 47 (S3)** · 0 / −1 / −1 / −1 classic | **DS1302 real-time clock** (v2.0.21): date & time on the module's CR2032 — survives a full power-down; auto-detected (scratch-RAM magic probe); every real time set (phone sync, keypad menu, serial `rtcset`) is mirrored to the chip; no chip = the old phone-sync + NVS clock |
+| `RTC_ENABLED` / `RTC_I2C_ADDR` | **1 / 0x68** (both variants) | **DS1307 real-time clock** (v2.0.23; a DS1302 on 40/42/47 in v2.0.21–22): I2C on the shared I2C0 bus — S3 SDA **8** / SCL **9**, classic 21 / 22 — **VCC 5 V** (the DS1307 needs 4.5–5.5 V) and its 5 V pull-ups (R2/R3 on "Tiny RTC" boards) removed or a level shifter; date & time on the module's coin cell survive a full power-down; auto-detected (ACK at 0x68; CH flag = untrusted until set); every real time set (phone sync, keypad menu, serial `rtcset`) is mirrored to the chip; no chip = the old phone-sync + NVS clock. DS3231 boards work unchanged. |
 | `DOOR_LOCK_ACTIVE` / `DOOR_CLOSED_LEVEL` | HIGH / LOW | driver polarity — flip if your lock board is active-LOW |
 
 ### Feature switches
@@ -325,7 +325,7 @@ control page), the physical keypad is optional:
   modem-sleep trade-off to make.
 - **Every unused GPIO is parked disabled** (`INPUT_PULLDOWN`) at boot —
   nothing floats, nothing half-drives: `[pins] N unused pads parked
-  DISABLED`. On the S3 that's 3, 11 (21 = door, 40/42/47 = DS1302 RTC, 41 = DHT11, 48 = pixel). Never touched:
+  DISABLED`. On the S3 that's 3, 11, 40, 42, 47 (21 = door, 41 = DHT11, 48 = pixel; the RTC is on I2C). Never touched:
   35/36/37 (R8 PSRAM lines — even boards that report no PSRAM), 0/45/46
   (boot straps), 19/20 (USB), 43/44 (UART0), 26–32 (module flash).
 - **PSRAM is not used at all** — some boards sold as "N16R8" report

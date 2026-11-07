@@ -77,9 +77,11 @@ void setup() {
   Serial.printf("flash     : %u MB @ %u MHz\r\n",
                 ESP.getFlashChipSize() / 1048576, ESP.getFlashChipSpeed() / 1000000);
   Serial.printf("heap free : %u kB\r\n", ESP.getFreeHeap() / 1024);
-  uint8_t mac[6];  ESP.getEfuseMac(mac);  // byte-wise to avoid printf issues
+  uint64_t efuse = ESP.getEfuseMac();     // 6 bytes, first octet = low byte
+  uint8_t mac[6];                         // byte-wise to avoid %llx printf issues
+  for (int i = 0; i < 6; i++) mac[i] = (uint8_t)(efuse >> (8 * i));
   Serial.printf("MAC       : %02X:%02X:%02X:%02X:%02X:%02X\r\n",
-                mac[0], mac[5], mac[3], mac[4], mac[2], mac[1]);
+                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
   // ---- PSRAM: the R8 question ------------------------------------------
   uint32_t ps = ESP.getPsramSize();
