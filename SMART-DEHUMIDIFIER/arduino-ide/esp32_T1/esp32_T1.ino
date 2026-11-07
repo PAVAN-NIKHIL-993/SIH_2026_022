@@ -121,6 +121,8 @@ static const Params DEFAULTS = {60, 120, HEATER_CAP_PCT, 70, 3, 1};
 static Params P = DEFAULTS;
 
 // =================================================================== STATE
+// All types stay ABOVE the first function: the Arduino IDE inserts its
+// automatic function prototypes right before the first function.
 enum State : uint8_t { IDLE, RUNNING, DONE, FAULT };
 static const char *const STATE_NAME[] = {"IDLE", "RUNNING", "DONE", "FAULT"};
 enum FanMode : uint8_t { FAN_MODE_AUTO, FAN_MODE_ON, FAN_MODE_OFF };
@@ -129,6 +131,7 @@ enum Result : uint8_t { RES_NONE, RES_DONE, RES_STOPPED, RES_OVERTEMP, RES_SENSO
 static const char *const RES_NAME[] = {"", "Done", "Stopped", "Over-temp", "Sensor fault", "No heat"};
 
 struct Dht { uint8_t pin; float t, h; bool ok; uint8_t miss; };
+struct Note { uint16_t hz, ms; };   // buzzer step: hz 0 = pause, ms 0 = end
 static Dht dht1 = {PIN_DHT1, NAN, NAN, false, 0};
 static Dht dht2 = {PIN_DHT2, NAN, NAN, false, 0};
 
@@ -174,7 +177,6 @@ static long clampL(long v, long lo, long hi) { return v < lo ? lo : v > hi ? hi 
 static uint8_t pct8(float v) { return isnan(v) ? 255 : (uint8_t)clampL(lroundf(v), 0, 100); }
 
 // ================================================================== BUZZER
-struct Note { uint16_t hz, ms; };         // hz 0 = pause, ms 0 = end
 static const Note SND_BOOT[]    = {{1047, 90}, {1319, 90}, {1568, 140}, {0, 0}};
 static const Note SND_START[]   = {{1568, 90}, {0, 60}, {2093, 160}, {0, 0}};
 static const Note SND_STOP[]    = {{2093, 90}, {0, 60}, {1568, 160}, {0, 0}};
