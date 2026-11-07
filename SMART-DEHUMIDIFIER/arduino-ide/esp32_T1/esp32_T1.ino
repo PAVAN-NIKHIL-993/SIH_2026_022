@@ -32,8 +32,12 @@
  *    Heater : PWM never above 70 % (hard limit). Full power (the limit) up
  *             to target - 1.5 C, then PID holds the target. Stops by itself
  *             when the drying time is over.
- *    Fan    : Auto = humidity >= 70 % -> runs 3 min, then checks again.
- *             On / Off buttons override it (Auto again after a restart).
+ *    Fan    : Auto (while drying) = humidity >= 60 % switches the fan on at
+ *             the next reading (every 2.5 s); it runs at least 10 s and
+ *             stops once the humidity is below 58 %. On / Off buttons
+ *             override it (Auto again after a restart).
+ *    Readings: the page shows exactly what the two DHT22 measure (and
+ *             their average) - nothing is estimated or smoothed.
  *    Clock  : the ESP32's own RTC. Set it once on the Settings page (or
  *             "use phone time"; an unset clock is taken from the phone
  *             automatically) - it keeps counting from there. It survives
@@ -44,7 +48,7 @@
  *    Buzzer : tones for boot, start, target reached, done, stop, warning
  *             and a repeating fault alarm. Can be switched off.
  *    Settings: presets + custom parameters (target, time, heater max,
- *             fan humidity, fan minutes, buzzer), "Defaults" restores them.
+ *             fan humidity, fan minimum run, buzzer), "Defaults" restores them.
  *    Safety : heater off at boot, when stopped and on any fault; cut at 90 C
  *             (hottest sensor); no Start above 85 C; one sensor lost =
  *             warning, both lost = fault after 15 s; heater that never
@@ -59,7 +63,7 @@
 #include <time.h>
 
 // ================================================================ SETTINGS
-#define FW_NAME         "esp32_T1 v1.2"
+#define FW_NAME         "esp32_T1 v1.3"
 #define AP_SSID         "Dehumidifier"
 #define AP_PASS         "dryer1234"      // at least 8 characters
 
@@ -87,7 +91,9 @@
 #define HEAT_MIN_PCT    10
 #define FAN_RH_MIN      30
 #define FAN_RH_MAX      95
-#define FAN_MIN_MAX     30
+#define FAN_SEC_MIN     5     // Auto fan minimum run, seconds
+#define FAN_SEC_MAX     600
+#define FAN_HYST_RH     2     // Auto fan stops below (threshold - this) %
 
 #define HARD_CUT_C      90.0f // hottest sensor at/above -> heater cut + fault
 #define START_BELOW_C   85.0f // Start refused until the chamber is below this
@@ -114,10 +120,10 @@ struct Params {               // saved in flash; DEFAULTS = factory values
   uint16_t minutes;           // drying time
   uint8_t  heatMax;           // heater ceiling, % (never above HEATER_CAP_PCT)
   uint8_t  fanRh;             // Auto fan starts at/above this humidity, %
-  uint8_t  fanMin;            // ... and runs this many minutes
+  uint16_t fanSec;            // ... and runs at least this many seconds
   uint8_t  buzzer;            // 1 = sounds on
 };
-static const Params DEFAULTS = {60, 120, HEATER_CAP_PCT, 70, 3, 1};
+static const Params DEFAULTS = {60, 120, HEATER_CAP_PCT, 60, 10, 1};
 static Params P = DEFAULTS;
 
 // =================================================================== STATE
@@ -154,7 +160,7 @@ static Preferences prefs;
 static State    state    = IDLE;
 static uint8_t  heatPct  = 0;             // heater output now, %
 static FanMode  fanMode  = FAN_MODE_AUTO;
-static bool     fanOn    = false, fanBurst = false;
+static bool     fanOn    = false;
 static uint32_t fanStart = 0;
 static bool     holding  = false;         // false = full-power heat-up
 static bool     reached  = false;         // target reached in this batch
@@ -351,16 +357,20 @@ static void fanSet(bool on) {
   digitalWrite(PIN_FAN_EN, on ? FAN_ON_LEVEL : !FAN_ON_LEVEL);
 }
 
-// Auto: while drying, humidity >= fanRh starts a fanMin-minute run; when it
-// ends the humidity is checked again. On / Off = manual.
+// Auto (while drying): humidity >= fanRh switches the fan on at the next
+// reading; it runs at least fanSec seconds and keeps running until the
+// humidity is below fanRh - FAN_HYST_RH. On / Off = manual.
 static void fanControl(uint32_t now) {
-  if (fanMode != FAN_MODE_AUTO) { fanBurst = false; fanSet(fanMode == FAN_MODE_ON); return; }
-  if (state != RUNNING) { fanBurst = false; fanSet(false); return; }
-  if (fanBurst && now - fanStart < (uint32_t)P.fanMin * 60000UL) { fanSet(true); return; }
+  if (fanMode != FAN_MODE_AUTO) { fanSet(fanMode == FAN_MODE_ON); return; }
   float h = avgH();
-  fanBurst = !isnan(h) && h >= P.fanRh;
-  if (fanBurst) fanStart = now;
-  fanSet(fanBurst);
+  bool on;
+  if (state != RUNNING)                          on = false;
+  else if (!isnan(h) && h >= P.fanRh)            on = true;    // humid: run
+  else if (!fanOn)                               on = false;
+  else if (now - fanStart < P.fanSec * 1000UL)   on = true;    // minimum run
+  else on = !isnan(h) && h >= P.fanRh - FAN_HYST_RH;           // until below 58 %
+  if (on && !fanOn) fanStart = now;
+  fanSet(on);
 }
 
 // ================================================================== FLASH
@@ -369,8 +379,8 @@ static void loadAll() {
   P.setC    = (int16_t)clampL(prefs.getInt("set", DEFAULTS.setC), SET_MIN_C, SET_MAX_C);
   P.minutes = (uint16_t)clampL(prefs.getUShort("min", DEFAULTS.minutes), 1, MAX_MINUTES);
   P.heatMax = (uint8_t)clampL(prefs.getInt("hmax", DEFAULTS.heatMax), HEAT_MIN_PCT, HEATER_CAP_PCT);
-  P.fanRh   = (uint8_t)clampL(prefs.getInt("frh", DEFAULTS.fanRh), FAN_RH_MIN, FAN_RH_MAX);
-  P.fanMin  = (uint8_t)clampL(prefs.getInt("fmin", DEFAULTS.fanMin), 1, FAN_MIN_MAX);
+  P.fanRh   = (uint8_t)clampL(prefs.getInt("fanrh", DEFAULTS.fanRh), FAN_RH_MIN, FAN_RH_MAX);
+  P.fanSec  = (uint16_t)clampL(prefs.getInt("fansec", DEFAULTS.fanSec), FAN_SEC_MIN, FAN_SEC_MAX);
   P.buzzer  = (uint8_t)clampL(prefs.getInt("buzz", DEFAULTS.buzzer), 0, 1);
   histN = (uint8_t)clampL(prefs.getInt("histN", 0), 0, HIST_N);
   if (histN && prefs.getBytes("hist", hist, sizeof hist) != sizeof hist) histN = 0;
@@ -382,8 +392,8 @@ static void saveParams() {
   prefs.putInt("set", P.setC);
   prefs.putUShort("min", P.minutes);
   prefs.putInt("hmax", P.heatMax);
-  prefs.putInt("frh", P.fanRh);
-  prefs.putInt("fmin", P.fanMin);
+  prefs.putInt("fanrh", P.fanRh);
+  prefs.putInt("fansec", P.fanSec);
   prefs.putInt("buzz", P.buzzer);
   prefs.end();
 }
@@ -565,7 +575,6 @@ static const char *startCycle() {
   startT = t;  batchMaxT = t;  batchH0 = pct8(avgH());
   batchClock = clockNow();  energyWh = 0;  energyMs = startMs;
   gN = 0;  gEvery = 10;
-  fanBurst = false;
   Serial.printf("[start] target %d C for %u min, heater max %u %%\n", P.setC,
                 (unsigned)P.minutes, (unsigned)P.heatMax);
   play(SND_START);
@@ -692,7 +701,7 @@ footer{text-align:center;font-size:11px;opacity:.7}
    <label>Heater max % <i id="d_heat"></i><input id="p_heat" type="number" min="10" max="70" inputmode="numeric"></label>
    <label>Buzzer <i id="d_buzz"></i><select id="p_buzz"><option value="1">On</option><option value="0">Off</option></select></label>
    <label>Fan at RH % <i id="d_fanrh"></i><input id="p_fanrh" type="number" min="30" max="95" inputmode="numeric"></label>
-   <label>Fan run min <i id="d_fanmin"></i><input id="p_fanmin" type="number" min="1" max="30" inputmode="numeric"></label>
+   <label>Fan min run s <i id="d_fansec"></i><input id="p_fansec" type="number" min="5" max="600" inputmode="numeric"></label>
   </div>
   <div class="row"><button id="psave" class="gold">Save</button><button id="pdef">Defaults</button></div>
  </section>
@@ -709,7 +718,7 @@ footer{text-align:center;font-size:11px;opacity:.7}
 <script>
 'use strict';
 const $=i=>document.getElementById(i), all=s=>document.querySelectorAll(s);
-const PK=['set','min','heat','fanrh','fanmin','buzz'];
+const PK=['set','min','heat','fanrh','fansec','buzz'];
 const PRESETS=[['Gentle',45,180],['Standard',60,120],['Fast',70,90]];
 let tab='live',edit=0,synced=false,nb=-1;
 const one=v=>v==null?'--':v.toFixed(1), pc=v=>v==null?'--':v.toFixed(0);
@@ -816,7 +825,7 @@ static void addParams(String &o, const char *key, const Params &p) {
   o += ",\"min\":";      o += (unsigned long)p.minutes;
   o += ",\"heat\":";     o += (int)p.heatMax;
   o += ",\"fanrh\":";    o += (int)p.fanRh;
-  o += ",\"fanmin\":";   o += (int)p.fanMin;
+  o += ",\"fansec\":";   o += (unsigned long)p.fanSec;
   o += ",\"buzz\":";     o += (int)p.buzzer;
   o += "},";
 }
@@ -909,7 +918,12 @@ static bool argNum(const char *k, long &v) {
   return true;
 }
 
-// ?set=&min=&heat=&fanrh=&fanmin=&buzz= (any subset). Clamped into range.
+static bool sameParams(const Params &a, const Params &b) {
+  return a.setC == b.setC && a.minutes == b.minutes && a.heatMax == b.heatMax &&
+         a.fanRh == b.fanRh && a.fanSec == b.fanSec && a.buzzer == b.buzzer;
+}
+
+// ?set=&min=&heat=&fanrh=&fansec=&buzz= (any subset). Clamped into range.
 static void takeArgs() {
   Params n = P;
   long v;
@@ -917,14 +931,14 @@ static void takeArgs() {
   if (argNum("min", v))    n.minutes = (uint16_t)clampL(v, 1, MAX_MINUTES);
   if (argNum("heat", v))   n.heatMax = (uint8_t)clampL(v, HEAT_MIN_PCT, HEATER_CAP_PCT);
   if (argNum("fanrh", v))  n.fanRh   = (uint8_t)clampL(v, FAN_RH_MIN, FAN_RH_MAX);
-  if (argNum("fanmin", v)) n.fanMin  = (uint8_t)clampL(v, 1, FAN_MIN_MAX);
+  if (argNum("fansec", v)) n.fanSec  = (uint16_t)clampL(v, FAN_SEC_MIN, FAN_SEC_MAX);
   if (argNum("buzz", v))   n.buzzer  = (uint8_t)clampL(v, 0, 1);
-  if (memcmp(&n, &P, sizeof n) != 0) {
+  if (!sameParams(n, P)) {
     P = n;
     saveParams();
-    Serial.printf("[set] target %d C, %u min, heater max %u %%, fan %u %% / %u min, buzzer %s\n",
+    Serial.printf("[set] target %d C, %u min, heater max %u %%, fan %u %% / %u s, buzzer %s\n",
                   P.setC, (unsigned)P.minutes, (unsigned)P.heatMax, (unsigned)P.fanRh,
-                  (unsigned)P.fanMin, P.buzzer ? "on" : "off");
+                  (unsigned)P.fanSec, P.buzzer ? "on" : "off");
   }
 }
 
