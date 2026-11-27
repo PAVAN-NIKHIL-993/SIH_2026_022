@@ -21,6 +21,7 @@
     .lbl{font-size:11px;fill:#475569}
     .wire{stroke:#0369a1;stroke-width:2;fill:none}
     .power{stroke:#b45309;stroke-width:3;fill:none}
+    .i2c{stroke:#6d28d9;stroke-width:2;fill:none}
   </style>
 
   <rect x="0" y="0" width="1120" height="790" fill="#ffffff"/>
@@ -28,9 +29,9 @@
   <text x="20" y="48" class="sub">all grounds common · solar panel → BMS → battery → BMS out · relay cuts power at end of cycle</text>
 
   <!-- ================= ESP32 ================= -->
-  <!-- ================= ESP32 ================= -->
   <rect class="box" x="470" y="150" width="220" height="330" rx="12" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
   <text class="ttl" x="580" y="176" text-anchor="middle">ESP32 DevKit V1</text>
+  <text class="sub" x="580" y="192" text-anchor="middle">hotspot: AgarbattiDryer → 192.168.4.1</text>
 
   <!-- left pins -->
   <text class="pin" x="480" y="222">GPIO21/22 · Wire</text>
@@ -47,7 +48,6 @@
   <text class="pin" x="680" y="358" text-anchor="end">GPIO17/18 · IN1/IN2</text>
   <text class="pin" x="680" y="376" text-anchor="end">GPIO14 · ENB</text>
   <text class="pin" x="680" y="394" text-anchor="end">GPIO13/4 · IN3/IN4</text>
-  <text class="pin" x="680" y="452" text-anchor="end">GPIO23 → relay IN</text>
   <text class="pin" x="680" y="452" text-anchor="end">GPIO23 → relay IN</text>
 
   <!-- ================= AHT10 sensors ================= -->

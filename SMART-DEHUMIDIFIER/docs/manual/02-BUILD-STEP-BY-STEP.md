@@ -33,7 +33,7 @@ BMS out (before relay) ──> 5 V buck ──> ESP32 VIN + GND   (ESP always po
 ## 3. Flash the ESP32 (before it touches the machine)
 
 1. Arduino IDE → Boards Manager → install **esp32 by Espressif**.
-2. Library Manager → **ArduinoJson by Benoit Blanchon (v7)**.
+2. No libraries to install — the firmware uses core built-ins only.
 3. Open `arduino-ide/SMART-DEHUMIDIFIER-single-file/SMART-DEHUMIDIFIER-single-file.ino` → board **ESP32 Dev
    Module** → select Port → **Upload**. (PlatformIO: `pio run -t upload`.)
 4. Serial Monitor @115200. You should see the banner, `[sens]`, `[batt]`,
@@ -134,13 +134,13 @@ battery(+) ──[100k]──┬──> GPIO36
 
 - No display hardware. `/` = the full-control dashboard, **`/display`**
   = a read-only kiosk page (huge type, 1 Hz refresh, wake-lock) — mount
-  a phone or tablet on the pillar as the screen. S3 pins 3 and 11 stay
-  free; 40/42/47 carry the DS1302 RTC (v2.0.21 — see 4.14); 41 = DHT11,
+  a phone or tablet on the pillar as the screen. S3 pins 3, 11, 40, 42
+  and 47 stay free (the RTC is on I2C — see 4.14); 41 = DHT11,
   48 = on-board pixel.
 - If a physical screen is ever wanted again: `DISPLAY_ENABLED 1` (SPI
-  ILI9488) — re-pick SCK/MOSI/CS/DC/RST first: 40/42/47 now carry the
-  DS1302 RTC (v2.0.21) and 41 the DHT11, so only 3/11 (plus the PCF #2
-  plan) are free. Re-add the wiring then.
+  ILI9488) — re-pick MOSI/RST first: 41 carries the DHT11 and 48 the
+  pixel, so use 3/11/40/42/47 (plus the PCF #2 plan). Re-add the wiring
+  then.
 
 ### 4.8 Optional: hex keypad (PCF8574 @ 0x20 on GPIO21/22)
 
@@ -231,26 +231,51 @@ pull-up DATA→3V3.
 - DHT11 reads whole degrees / ±5 %RH — coarse but fine outdoors; the
   chamber precision comes from the AHT10 + DHT22.
 
-### 4.14 DS1302 RTC — date & time that survive a full power-down (S3, v2.0.21)
+### 4.14 DS1307 RTC — date & time that survive a full power-down (v2.0.23)
 
-**Optional.** The module has its own CR2032 coin cell, so the calendar
-keeps running even when the whole pillar is off.
+**Optional.** The module has its own coin cell, so the calendar keeps
+running even when the whole pillar is off. (v2.0.21–22 used a DS1302 on
+GPIO 40/42/47 — those pins are free again.)
 
-**Wiring (S3 only):** VCC → **3V3** · GND → **GND** · RST → **GPIO40** ·
-SCLK → **GPIO42** · I/O → **GPIO47** · BZ → unused. Nothing else —
-the firmware bit-bangs the 3-wire bus (no library).
+**Wiring — it shares the I2C0 bus, no GPIO of its own:**
+
+| DS1307 module | ESP32-S3 | classic ESP32 |
+|---|---|---|
+| VCC | **5V** | 5V (VIN) |
+| GND | GND | GND |
+| SDA | **GPIO 8** | GPIO 21 |
+| SCL | **GPIO 9** | GPIO 22 |
+| SQW / DS / BAT | unused | unused |
+
+- **5 V is required** — the DS1307 runs on 4.5–5.5 V; at 3.3 V it treats
+  the supply as failed and ignores the bus (the web page then says *no
+  DS1307*).
+- **Remove the module's 5 V pull-ups** — "Tiny RTC" boards pull SDA/SCL to
+  5 V through **R2 + R3**, and ESP32 pins are *not* 5 V tolerant. Unsolder
+  both (the AHT10/PCF boards already pull the bus up to 3.3 V) or put an
+  I2C level shifter in between. The DS1307 reads 3.3 V logic fine.
+- **Coin cell:** with a plain CR2032 in a Tiny RTC also remove the LIR2032
+  charger (D1, R4, R5) and bridge R6 — or keep the rechargeable LIR2032.
+- Its on-board AT24C32 EEPROM (0x50) is recognised as smaller than 32 kB
+  and left alone. Want the AT24C256 registry as well? Strap that board's
+  A0 to 3V3 (0x51) and set `ELOG_ADDR 0x51`.
+- A **DS3231** board (3.3 V-native, far more accurate) works with the same
+  driver — VCC → 3V3 then.
+- Bench check first: `arduino-ide/sensor-tests/rtc-test/` scans the bus,
+  names every device and sets the chip from your phone.
 
 **Behaviour:**
-- Auto-detected at boot (scratch-RAM magic probe). No chip fitted? The
-  dryer runs exactly as before: phone sync + NVS clock — no config, no
-  error, no pin must be free.
+- Auto-detected at boot (ACK at 0x68). A fresh module (CH flag set) is
+  untrusted until the first real set. No chip fitted? The dryer runs
+  exactly as before: phone sync + NVS clock — no config, no error.
 - The web page and serial log show the RTC status (present / time valid /
   last sync); the web "SET TIME FROM PHONE" and the keypad clock menu
   mirror the real time **into the chip** too, so the next boot reads the
   calendar from the coin cell.
 - Serial: `rtc` = status, `rtcset` = copy the running clock into the
   chip (for bench use).
-- Classic ESP32: `RTC_ENABLED 0`, the pins are −1 — this is an S3 part.
+- Both variants: `RTC_ENABLED 1`, `RTC_I2C_ADDR 0x68` (config.h /
+  config-s3.h).
 
 ## 5. First full boot checklist
 

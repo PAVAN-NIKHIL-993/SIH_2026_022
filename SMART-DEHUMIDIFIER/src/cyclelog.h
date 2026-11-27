@@ -11,6 +11,7 @@
 #include <Arduino.h>
 
 namespace cyclelog {
+
 void begin();                            // mount FS, restore counter, prune
 void start();                            // called by Dryer::start()
 void finish(const char *reason, const char *note);   // write + prune
@@ -19,14 +20,9 @@ String lastFile();               // newest cycle CSV name ("" = none yet)       
 
 String listingJson();                    // /api/cycles payload
 String safePath(const String &name);     // "" if invalid, else "/cycles/<name>"
-String listingJson();                    // /api/cycles payload
+
 /** Apply cfg.tzMinutes to libc (file names / header stamps use it). */
 void applyTz();
-
-uint32_t cycleNo();          // NVS cycle counter (maintenance nag #33)
-uint16_t fileCount();        // stored cycles (storage-full warning #30)
-
-} // namespace cyclelog
 
 uint32_t cycleNo();          // NVS cycle counter (maintenance nag #33)
 uint16_t fileCount();        // stored cycles (storage-full warning #30)

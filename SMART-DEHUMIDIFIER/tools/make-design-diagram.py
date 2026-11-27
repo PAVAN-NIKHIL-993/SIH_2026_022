@@ -39,13 +39,13 @@ p1_boxes = [
  B('l298', 'L298N\nENB = 17 (fan PWM)\nIN3/IN4 tied on the module (v2.0.10)\n→ OUTLET fan (burst law)', 400, 320, 280, 64),
  B('buck', '5 V BUCK (set 5.0 V first)\n→ ESP32 · relays · HX711 · keypad', 740, 320, 280, 64),
  # brain
- B('s3', 'ESP32-S3 DevKitC\n(the brain · zero libraries)\n\nBOOT btn = 0 (start/stop)\nlatch hold = 14\nI2C0 = 8 / 9 (I2C1 free)\nHX711 = 1 / 2\nbattery = ADC 4 · gate 5\nheater = RPWM 12 · EN 13\nfan ENB = 17\ndoor = 21 · DHT11 = 41\nDHT22 = 10 · opto = 18\nrelays = 6 / 7 · toggle = 39\nbuttons = 15 / 16\nbuzzer = 38 · pixel = 48\nRTC DS1302 = 40 / 42 / 47\n\n(no display — the website\nis the screen, v2.0.7)', 390, 430, 300, 560),
+ B('s3', 'ESP32-S3 DevKitC\n(the brain · zero libraries)\n\nBOOT btn = 0 (start/stop)\nlatch hold = 14\nI2C0 = 8 / 9 (I2C1 free)\nHX711 = 1 / 2\nbattery = ADC 4 · gate 5\nheater = RPWM 12 · EN 13\nfan ENB = 17\ndoor = 21 · DHT11 = 41\nDHT22 = 10 · opto = 18\nrelays = 6 / 7 · toggle = 39\nbuttons = 15 / 16\nbuzzer = 38 · pixel = 48\nRTC DS1307 = I2C0 8 / 9 (0x68)\n\n(no display — the website\nis the screen, v2.0.7)', 390, 430, 300, 560),
  # left column — I2C0
  B('i2c0', 'I2C0 BUS — GPIO 8 / 9', 40, 430, 300, 34, 'purple', bold_first=False),
  B('aht1', 'AHT10 (0x38)\nchamber TOP · temp/RH', 40, 474, 300, 54),
  B('pcf1', 'PCF8574 #1 @ 0x20 — KEYPAD 4×4\nB menu · 2/4/6/8 arrows · A OK\nC mode · D run', 40, 538, 300, 64, 'purple'),
  B('pcf2', 'PCF8574 #2 @ 0x21 — FRONT PANEL (mixed)\nP0/P1 → supply relay CH1/CH2 (active-LOW)\nP2/P3 → BUTTON-1 / BUTTON-2\nP4 → SOLAR toggle · P5 → opto\nP6 → door limit switch · P7 → buzzer\n(10 kΩ pull-ups on all pins)', 40, 612, 300, 100, 'purple'),
- B('freed', 'SPARE S3 GPIOs (no display)\nfrees 6 · 7 · 38 · 15 · 16 · 39 · 18 · 21\nafter PCF #2 lands\ntoday free: 3 · 11\n40/42/47 = DS1302 RTC (v2.0.21)\n41 = DHT11 · 48 = pixel · 35/36/37 = R8 PSRAM', 40, 722, 300, 94, 'gold'),
+ B('freed', 'SPARE S3 GPIOs (no display)\nfrees 6 · 7 · 38 · 15 · 16 · 39 · 18 · 21\nafter PCF #2 lands\ntoday free: 3 · 11 · 40 · 42 · 47\nRTC DS1307 on I2C (v2.0.23)\n41 = DHT11 · 48 = pixel · 35/36/37 = R8 PSRAM', 40, 722, 300, 94, 'gold'),
  B('loads2', 'DRIVEN VIA PCF #2\n2-CH SUPPLY RELAY — CH1 solar / CH2 bypass\n(never both · switch only with loads quiet)\nBUZZER KY-012 (low-side: + to 3V3)\nBUTTONS / TOGGLE / OPTO / DOOR read back', 40, 828, 300, 110, 'gold'),
  # right column
  B('aht2', 'DHT22 · cool-return path\nGPIO10 + 10k · chamber source #2\n(I2C1 free, GPIO11 spare)', 760, 430, 280, 54),
@@ -130,8 +130,8 @@ p3_boxes = [
  B('b16', 'supply::engage + door::engage\nrelay = toggle · lock = state', 60, 1066, 300, 50),
  B('b17', 'dryer.powerOn → IDLE (ready)', 60, 1128, 300, 50, 'terminator'),
  B('loophdr', '② loop() — every pass (cooperative, 0 = DRYER_RTOS)', 420, 130, 620, 40, 'purple', bold_first=False),
- B('looptasks', 'web::handle — site + captive DNS\nArduinoOTA.handle — IDE upload\nsensors.update — AHT10 + DHT22 avg\nbattery.update — ADC (5 s)\ndryer.tick — control core (1 s)\nkeypad.update → menu::key\nscale.update — HX711 (2 Hz)\ndoor::update — lock/limit workflow\nsupply::update — buttons/toggle/opto\ndht.update — DHT11 outdoor (10 s)\nrtc.sync — DS1302 boot restore · set-mirror\nserviceSerial — console\nserviceButton — BOOT btn (S3)\nbuzzer.update — beep edges\nmaybeAutoStart · maybeDiag (15 s)', 420, 182, 300, 440, 'process', bold_first=False),
- B('compmap', 'COMPONENTS DRIVEN\n\nphone (hotspot site)\nPC (OTA upload)\nAHT10 + DHT22 (chamber)\nbattery divider\nBTS7960 + 500 W coil\nL298N + outlet fan\nPCF #1 keypad\nPCF #2 relays · buzzer · buttons\ntoggle · opto · door switch\nHX711 + load cells\nAT24C256 cycle registry\ndoor limit switch\nDHT11 outdoor sensor\nDS1302 RTC (CR2032 coin cell)\nphone/tablet (web display\n+ full control page)', 760, 182, 280, 440, 'gold', bold_first=False),
+ B('looptasks', 'web::handle — site + captive DNS\nArduinoOTA.handle — IDE upload\nsensors.update — AHT10 + DHT22 avg\nbattery.update — ADC (5 s)\ndryer.tick — control core (1 s)\nkeypad.update → menu::key\nscale.update — HX711 (2 Hz)\ndoor::update — lock/limit workflow\nsupply::update — buttons/toggle/opto\ndht.update — DHT11 outdoor (10 s)\nrtc.sync — DS1307 boot restore · set-mirror\nserviceSerial — console\nserviceButton — BOOT btn (S3)\nbuzzer.update — beep edges\nmaybeAutoStart · maybeDiag (15 s)', 420, 182, 300, 440, 'process', bold_first=False),
+ B('compmap', 'COMPONENTS DRIVEN\n\nphone (hotspot site)\nPC (OTA upload)\nAHT10 + DHT22 (chamber)\nbattery divider\nBTS7960 + 500 W coil\nL298N + outlet fan\nPCF #1 keypad\nPCF #2 relays · buzzer · buttons\ntoggle · opto · door switch\nHX711 + load cells\nAT24C256 cycle registry\ndoor limit switch\nDHT11 outdoor sensor\nDS1307 RTC (I2C, coin cell)\nphone/tablet (web display\n+ full control page)', 760, 182, 280, 440, 'gold', bold_first=False),
  B('tickhdr', '③ dryer.tick() — the 1-second control core', 420, 640, 620, 36, 'purple', bold_first=False),
  B('t1', 'state machine — IDLE → RUNNING →\nCOOLDOWN → DONE / FAULT', 420, 692, 290, 56),
  B('t2', 'SAFETY: 95 °C hard cut ·\nsensors dead 15 s → FAULT', 420, 762, 290, 56, 'danger'),
@@ -145,7 +145,7 @@ p3_boxes = [
  B('webbox', '④ web::handle — the website on the hotspot\n/api/data 1 Hz JSON (everything) · /api/start 403-gated · /api/scale tare+cal\n/api/mode presets · /api/settime phone clock · /api/heat knob (60 s)\n/update OTA (refused while RUNNING) · /api/log.csv history · captive DNS', 420, 1330, 620, 150, 'green', bold_first=False),
  B('dataflow', 'DATA FLOW\nAHT10 → PID → PWM → coil\nRH → burst law → fan\ngrams → gates + target\nfaults → beep + site + CSV\nclock → NVS 30 min', 60, 1330, 340, 150, 'note', bold_first=False),
  B('rtos', 'DRYER_RTOS 1 = the same work split into 5 FreeRTOS tasks: web @ core 0 · sensors / control / panel / power @ core 1 · Wire mutex protects the shared I2C bus', 60, 1250, 1000, 60, 'note', bold_first=False),
- B('files', 'FILE MAP — main.cpp (boot · loop · console · watchdogs) · control.* (state machine · PID · fan law · gates) · sensors/aht10.* · battery.* · buzzer.* · keypad.* (PCF #1) ·\nscale.* (HX711) · door.* (workflow) · supply.* (latch · selector) · menu.* (keypad UI) · dht.* (DHT22 return + DHT11 out) · rtc.* (DS1302 clock) · web/webui (site — incl. /display kiosk) · cyclelog (CSV)', 60, 1500, 1000, 110, 'note', bold_first=False),
+ B('files', 'FILE MAP — main.cpp (boot · loop · console · watchdogs) · control.* (state machine · PID · fan law · gates) · sensors/aht10.* · battery.* · buzzer.* · keypad.* (PCF #1) ·\nscale.* (HX711) · door.* (workflow) · supply.* (latch · selector) · menu.* (keypad UI) · dht.* (DHT22 return + DHT11 out) · rtc.* (DS1307 clock) · web/webui (site — incl. /display kiosk) · cyclelog (CSV)', 60, 1500, 1000, 110, 'note', bold_first=False),
 ]
 p3_edges = (
   [E(f'b{i}', f'b{i+1}') for i in range(1, 17)] +

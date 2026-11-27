@@ -3,5 +3,5 @@
   "private": true,
   "description": "Headless smoke test for the embedded dashboard page",
   "scripts": { "test": "node ui-test.js" },
-  "devDependencies": { "jsdom": "^24.0.0" }
+  "devDependencies": { "jsdom": "^30.1.1" }
 }

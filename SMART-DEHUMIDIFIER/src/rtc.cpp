@@ -1,13 +1,18 @@
 /**
  * @file rtc.cpp
- * @brief DS1302 real-time clock driver - 3-wire bit-bang, library-free.
- * See rtc.h for wiring + behaviour. Pins come from the variant config
- * (S3: RST 40 / SCLK 42 / I-O 47; classic: -1 = not fitted).
+ * @brief DS1307 real-time clock driver - I2C, library-free (Wire only).
+ * See rtc.h for wiring + behaviour. Uses the I2C0 bus (Wire) that
+ * sensors.begin() starts: S3 SDA 8 / SCL 9, classic SDA 21 / SCL 22.
  */
 #include "rtc.h"
 #include "control.h"          // cfg.tzMinutes (local = UTC + offset)
 
 #if RTC_ENABLED
+#include <Wire.h>
+
+#ifndef RTC_I2C_ADDR
+#define RTC_I2C_ADDR 0x68     // DS1307 / DS3231 - fixed address
+#endif
 
 namespace rtc {
 
@@ -26,8 +31,8 @@ static time_t civilToEpoch(int y, int mo, int d, int h, int mi, int s) {
   return daysSinceEpoch(y, mo, d) * 86400L + h * 3600L + mi * 60L + s;
 }
 
-// DS1302 day-of-week register value for a civil date: 1 = Sunday .. 7.
-// 1970-01-01 was a Thursday (=5), hence the +4.
+// Day-of-week register value for a civil date: 1 = Sunday .. 7 (the DS1307
+// only needs the values to be sequential). 1970-01-01 was a Thursday (=5).
 static uint8_t dowFromCivil(int y, int mo, int d) {
   long days = daysSinceEpoch(y, mo, d);
   return (uint8_t)(((days % 7) + 7 + 4) % 7 + 1);
@@ -53,68 +58,59 @@ static void epochToCivil(time_t ep, int *y, int *mo, int *d,
 
 static uint8_t bcd2bin(uint8_t v) { return (uint8_t)((v >> 4) * 10 + (v & 0x0F)); }
 static uint8_t bin2bcd(uint8_t v) { return (uint8_t)(((v / 10) << 4) | (v % 10)); }
+static bool bcdOk(uint8_t v) { return (v & 0x0F) <= 9 && (v >> 4) <= 9; }
 
-// ---- DS1302 bit-bang ------------------------------------------------------
-// Frame: RST low -> high (chip select), START bit 0, 8-bit command byte
-// LSB-first, data bytes (in read mode the chip drives I/O, updating on
-// each SCLK falling edge), STOP bit 1, RST low.
-// Command byte: bit7=1, bit6=0 (clock data), bits5-1 = register,
-// bit0 = R/W (0 write / 1 read). Time: 0x80 write / 0x81 read; control
-// register: 0x8E write / 0x8F read; scratch RAM byte 0: 0xC0 (write) /
-// 0xC1 (read); registers auto-increment in burst.
-// Time registers 0-6 BCD: sec min hr dow date month year. CH (halt)
-// flag = bit7 of the SECONDS register; WP (write-protect) = bit7 of the
-// control register, power-on state UNDEFINED - always cleared before a
-// write (datasheet requirement).
+// ---- DS1307 registers (all BCD) -------------------------------------------
+// 0x00 seconds  bit7 = CH (clock halt: 1 = oscillator stopped)
+// 0x01 minutes
+// 0x02 hours    bit6 = 12/24 select (1 = 12 h mode)
+//               12 h: bit5 = PM, bits4-0 = 1..12 · 24 h: bits5-0 = 0..23
+// 0x03 day of week 1..7 · 0x04 date 1..31 · 0x05 month 1..12 · 0x06 year 00..99
+// 0x07 control (SQW/OUT) · 0x08-0x3F 56 bytes battery-backed RAM (untouched)
+// A burst read from 0x00 returns one consistent snapshot: the chip copies
+// its counters into a secondary buffer on the I2C START.
+// (DS3231: same 0x00-0x06 layout; seconds bit7 always 0, month bit7 =
+//  century flag - masked below.)
 
-static inline void ceHiLo(bool hi) { digitalWrite(PIN_RTC_RST, hi ? HIGH : LOW); }
-static inline void clkHiLo(bool hi) { digitalWrite(PIN_RTC_SCLK, hi ? HIGH : LOW); }
-
-static void rtcBitWrite(bool b) {
-  digitalWrite(PIN_RTC_IO, b ? HIGH : LOW);
-  clkHiLo(true);
-  clkHiLo(false);
+static bool readRegs(uint8_t *t) {             // the 7 time registers
+  Wire.beginTransmission(RTC_I2C_ADDR);
+  Wire.write((uint8_t)0x00);                     // register pointer
+  if (Wire.endTransmission(false) != 0) return false;        // repeated START
+  if (Wire.requestFrom((int)RTC_I2C_ADDR, 7) != 7) return false;
+  for (uint8_t i = 0; i < 7; i++) t[i] = (uint8_t)Wire.read();
+  return true;
 }
 
-static bool rtcBitRead() {
-  clkHiLo(true);
-  clkHiLo(false);                              // falling edge: chip updates
-  return (digitalRead(PIN_RTC_IO) == HIGH);    // bit, valid during the low
-}                                              // phase until the next fall
-
-static void byteWrite(uint8_t v) {
-  pinMode(PIN_RTC_IO, OUTPUT);
-  for (int i = 0; i < 8; i++) rtcBitWrite((v >> i) & 1);
+static bool writeRegs(const uint8_t *t) {
+  Wire.beginTransmission(RTC_I2C_ADDR);
+  Wire.write((uint8_t)0x00);
+  for (uint8_t i = 0; i < 7; i++) Wire.write(t[i]);
+  return Wire.endTransmission() == 0;
 }
 
-static uint8_t byteRead() {
-  pinMode(PIN_RTC_IO, INPUT);
-  uint8_t v = 0;
-  for (int i = 0; i < 8; i++) if (rtcBitRead()) v |= (uint8_t)(1u << i);
-  return v;
-}
-
-static void xfer(uint8_t addr, const uint8_t *data, uint8_t n, uint8_t *out) {
-  ceHiLo(false);
-  ceHiLo(true);                                   // chip select (CE = RST)
-  rtcBitWrite(false);                                // START
-  byteWrite(addr);
-  if (addr & 0x01) {                              // R/W bit (bit0): 1 = read
-    for (uint8_t i = 0; i < n; i++) out[i] = byteRead();
-  } else {
-    for (uint8_t i = 0; i < n; i++) byteWrite(data[i]);
+// hours register -> 0..23. In 24 h mode bit5 is the "20s" digit: masking
+// with 0x1F (as the old DS1302 driver did) turns 20:00-23:59 into 00-03.
+static int hour24(uint8_t hr) {
+  if (hr & 0x40) {                               // 12-hour mode
+    int h = bcd2bin(hr & 0x1F);                  // 1..12
+    if (hr & 0x20) return (h == 12) ? 12 : h + 12;   // PM
+    return (h == 12) ? 0 : h;                          // AM (12 AM = 00)
   }
-  rtcBitWrite(true);                                 // STOP
-  ceHiLo(false);
+  return bcd2bin(hr & 0x3F);                     // 24-hour mode
 }
 
 // sane = a time a real module would hold (year 2019-2099 keeps this
 // forgiving for modules that arrive with a seller-set date)
 static bool sane(const uint8_t *t) {
-  return bcd2bin(t[0]) < 60 && bcd2bin(t[1]) < 60
-      && bcd2bin(t[2] & 0x1F) <= 23                      // bits7-5 = mode/PM
+  uint8_t sec = t[0] & 0x7F, min = t[1] & 0x7F, mon = t[5] & 0x1F;
+  uint8_t hr = (t[2] & 0x40) ? (t[2] & 0x1F) : (t[2] & 0x3F);
+  if (!bcdOk(sec) || !bcdOk(min) || !bcdOk(hr) || !bcdOk(t[4]) ||
+      !bcdOk(mon) || !bcdOk(t[6])) return false;
+  bool hourOk = (t[2] & 0x40) ? (bcd2bin(hr) >= 1 && bcd2bin(hr) <= 12)
+                              : (bcd2bin(hr) <= 23);
+  return bcd2bin(sec) < 60 && bcd2bin(min) < 60 && hourOk
       && bcd2bin(t[4]) >= 1 && bcd2bin(t[4]) <= 31
-      && bcd2bin(t[5]) >= 1 && bcd2bin(t[5]) <= 12
+      && bcd2bin(mon) >= 1 && bcd2bin(mon) <= 12
       && bcd2bin(t[6]) >= 19 && bcd2bin(t[6]) <= 99;
 }
 
@@ -124,33 +120,15 @@ static bool sTrusted = false;
 bool begin() {
   sPresent = false;
   sTrusted = false;
-  if (PIN_RTC_RST < 0 || PIN_RTC_SCLK < 0 || PIN_RTC_IO < 0) return false;
-  pinMode(PIN_RTC_RST, OUTPUT);  ceHiLo(false);
-  pinMode(PIN_RTC_SCLK, OUTPUT); clkHiLo(false);
-  pinMode(PIN_RTC_IO, OUTPUT);   digitalWrite(PIN_RTC_IO, LOW);
-
-  {
-    uint8_t zero = 0x00;
-    xfer(0x8E, &zero, 1, nullptr);               // clear WP (power-on state
-  }                                              // is undefined per datasheet)
-  // Deterministic presence probe on scratch RAM byte 0: read it, write a
-  // magic value, read it back, restore it. A dangling bus echoes nothing,
-  // so only a real chip can return the magic.
-  uint8_t orig = 0, magic = 0xA5, back = 0;
-  xfer(0xC1, nullptr, 1, &orig);
-  xfer(0xC0, &magic, 1, nullptr);
-  xfer(0xC1, nullptr, 1, &back);
-  xfer(0xC0, &orig, 1, nullptr);                 // give the byte back
-  sPresent = (back == magic);
-  if (!sPresent) return false;
-  {
-    uint8_t a[7];
-    xfer(0x81, nullptr, 7, a);
-    // CH flag (bit7 of seconds) set = clock halted: factory-fresh modules
-    // ship this way with garbage registers, so the time is untrusted until
-    // the first real set (site sync or 'rtcset').
-    sTrusted = sane(a) && !(a[0] & 0x80);
-  }
+  Wire.beginTransmission(RTC_I2C_ADDR);
+  if (Wire.endTransmission() != 0) return false;     // nobody at 0x68
+  uint8_t t[7];
+  if (!readRegs(t)) return false;
+  sPresent = true;
+  // CH set = oscillator halted: factory-fresh modules (and dead coin cells)
+  // come up this way, often with junk registers - untrusted until the first
+  // real set (site sync, keypad menu or 'rtcset').
+  sTrusted = !(t[0] & 0x80) && sane(t);
   return true;
 }
 
@@ -159,20 +137,10 @@ bool present() { return sPresent; }
 bool readTime(time_t *outEp) {
   if (!sPresent) return false;
   uint8_t t[7];
-  xfer(0x81, nullptr, 7, t);
-  if (!sane(t)) return false;
-  int year = 2000 + bcd2bin(t[6]);
-  // Hours register: bit7 = 12 h mode select, bit5 = AM/PM (12 h mode),
-  // bits4-0 = hour BCD (0-23 in 24 h mode, 1-12 in 12 h mode).
-  int hour;
-  if (t[2] & 0x80) {                              // 12-hour mode
-    hour = bcd2bin(t[2] & 0x1F);                  // 1-12
-    if (t[2] & 0x20) hour = (hour == 12) ? 12 : hour + 12;   // PM
-    else            hour = (hour == 12) ? 0  : hour;         // AM
-  } else                                          // 24-hour mode
-    hour = bcd2bin(t[2] & 0x1F);
-  time_t ep = civilToEpoch(year, bcd2bin(t[5]), bcd2bin(t[4]),
-                           hour, bcd2bin(t[1]), bcd2bin(t[0]));
+  if (!readRegs(t) || (t[0] & 0x80) || !sane(t)) return false;  // halted/junk
+  time_t ep = civilToEpoch(2000 + bcd2bin(t[6]), bcd2bin(t[5] & 0x1F),
+                           bcd2bin(t[4]), hour24(t[2]),
+                           bcd2bin(t[1] & 0x7F), bcd2bin(t[0] & 0x7F));
   ep -= (time_t)cfg.tzMinutes * 60;              // chip holds LOCAL time
   *outEp = ep;
   return true;
@@ -184,39 +152,49 @@ void writeNow() {
   if (ep <= (time_t)1700000000) return;          // don't push an unset clock
   int y, mo, d, h, mi, s;
   epochToCivil(ep + (time_t)cfg.tzMinutes * 60, &y, &mo, &d, &h, &mi, &s);
-  uint8_t dow = dowFromCivil(y, mo, d);    // from the LOCAL civil date
   uint8_t t[7] = {
-    bin2bcd((uint8_t)s), bin2bcd((uint8_t)mi),
-    bin2bcd((uint8_t)(h & 0x1F)),        // 24 h (bit5 = 12-h flag = 0)
-    bin2bcd(dow), bin2bcd((uint8_t)d), bin2bcd((uint8_t)mo),
+    bin2bcd((uint8_t)s),                 // bit7 CH = 0 -> oscillator runs
+    bin2bcd((uint8_t)mi),
+    bin2bcd((uint8_t)h),                 // bit6 = 0 -> 24-hour mode
+    dowFromCivil(y, mo, d),              // 1..7 (from the LOCAL civil date)
+    bin2bcd((uint8_t)d), bin2bcd((uint8_t)mo),
     bin2bcd((uint8_t)((y >= 2000 ? y - 2000 : y) % 100)),
   };
-  {
-    uint8_t zero = 0x00;
-    xfer(0x8E, &zero, 1, nullptr);               // clear WP before the write
-    xfer(0x80, t, 7, nullptr);                   // burst; seconds bit7=0
-  }                                              // clears CH: now ticking
-  sTrusted = true;
+  if (writeRegs(t)) sTrusted = true;
 }
 
 const char *statusText() {
-  static char b[64];
+  static char b[80];
   if (!sPresent)
-    snprintf(b, sizeof(b), "no DS1302 (clock = phone sync + NVS)");
+    snprintf(b, sizeof(b), "no DS1307 at 0x%02X (SDA %d / SCL %d, VCC 5 V) - clock = phone sync + NVS",
+             (unsigned)RTC_I2C_ADDR, (int)PIN_I2C0_SDA, (int)PIN_I2C0_SCL);
   else if (sTrusted) {
     time_t ep;
     if (readTime(&ep)) {
       time_t local = ep + (time_t)cfg.tzMinutes * 60;
       int y, mo, d, h, mi, s;
       epochToCivil(local, &y, &mo, &d, &h, &mi, &s);
-      snprintf(b, sizeof(b), "DS1302 OK %04d-%02d-%02d %02d:%02d:%02d (coin-cell)",
+      snprintf(b, sizeof(b), "DS1307 OK %04d-%02d-%02d %02d:%02d:%02d (coin-cell)",
                y, mo, d, h, mi, s);
-    } else snprintf(b, sizeof(b), "DS1302 OK but registers read garbage");
+    } else snprintf(b, sizeof(b), "DS1307 found but its registers read garbage");
   } else
-    snprintf(b, sizeof(b), "DS1302 present, no valid time yet (open site or 'rtcset')");
+    snprintf(b, sizeof(b), "DS1307 found, clock not set yet (open the site or type 'rtcset')");
   return b;
 }
 
+}  // namespace rtc
+
+#else   // !RTC_ENABLED - no RTC on this build
+
+// Same API as no-ops - the contract rtc.h documents - so callers such as
+// the serial console's `rtc` / `rtcset` commands need no #if of their own
+// (they failed to link on the classic build before v2.0.22).
+namespace rtc {
+bool begin() { return false; }
+bool present() { return false; }
+bool readTime(time_t *outEp) { (void)outEp; return false; }
+void writeNow() {}
+const char *statusText() { return "no RTC on this build (RTC_ENABLED 0 - clock = phone sync + NVS)"; }
 }  // namespace rtc
 
 #endif  // RTC_ENABLED

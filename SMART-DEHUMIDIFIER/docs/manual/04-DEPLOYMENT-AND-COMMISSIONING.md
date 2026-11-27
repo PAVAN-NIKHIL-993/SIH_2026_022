@@ -60,7 +60,8 @@ Rules of thumb:
 **Optional GitHub-hosted UI:**
 1. Push the repo to GitHub (the generated site is `SMART-DEHUMIDIFIER/docs/index.html`).
 2. Repo → Settings → Pages → Source: **GitHub Actions** (workflow included).
-3. Check `ONLINE_UI_URL` in `src/config.h` equals your Pages URL.
+3. Check `ONLINE_UI_URL` in `src/config.h` (and `variants/esp32-s3/config-s3.h`)
+   equals your Pages URL — default `https://pavan-nikhil-993.github.io/SIH_2026_022/`.
 4. Phone (on hotspot + mobile data) opens **http://192.168.4.1/online** —
    bookmark it. No internet → auto-fallback to the embedded page.
 5. Cycle backup: in the online UI fill repo/branch/folder + a **fine-grained
@@ -69,7 +70,9 @@ Rules of thumb:
 
 **Editing the website:** change `src/webui.h` → run
 `node tools/online/sync-online.js` → commit both files. ESP gets changes on
-next flash; Pages gets them on next push.
+next flash; Pages gets them on next push. Check the result first in any
+browser, no hardware needed: `node tools/preview/serve.js` → localhost:8080
+(simulated live data for every tile, the chart and `/display`).
 
 ## 6. Operating rhythm (daily use)
 

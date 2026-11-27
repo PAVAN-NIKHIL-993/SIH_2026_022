@@ -19,6 +19,8 @@
 | `src/menu.*` | v2.0 on-device menu: keypad navigation (2/4/6/8, A, B, #, *) + digit parameter entry on the TFT |
 | `src/control.*` | **The brain**: Settings (NVS-persisted, versioned), state machine, heater PID, fan law, safety cuts, RAM datalog, manual heat override (web knob, 60 s then back to automatic) |
 | `src/cyclelog.*` | Per-cycle CSV files in LittleFS, timestamps via phone-synced clock, auto-prune to 40, listing JSON |
+| `src/rtc.*` | DS1307 real-time clock on the shared I2C0 bus (0x68, VCC 5 V): auto-detect, CH (clock-halt) = untrusted until set, 12/24 h decoding, boot restore before the NVS clock, every real time set written back (v2.0.23; DS1302 in v2.0.21–22) |
+| `src/eelog.*` | Optional AT24C256 long-term cycle registry (0x50): ring of 817 summaries with CRC; a smaller 24Cxx (e.g. the AT24C32 on DS1307 boards) is detected and left alone |
 | `src/web.*` | AP + captive DNS + all HTTP endpoints |
 | `src/webui.h` | The entire embedded website as one PROGMEM page (Dashboard / Parameters, one-click defaults, built-in typical forecast) |
 | `tools/online/sync-online.js` | Regenerates the GitHub-Pages site (`docs/index.html`) from webui.h + injects bridge & GitHub-backup layer |

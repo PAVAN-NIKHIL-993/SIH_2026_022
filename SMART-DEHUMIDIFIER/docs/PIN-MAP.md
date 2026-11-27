@@ -39,11 +39,11 @@ use internally. (Opto → GPIO 18, DHT11 → GPIO 41, door → GPIO 21.)
 | **SOLAR toggle (SPDT)** | position | **39** | in (pull-up) | HIGH = solar requested |
 | **Supply optocoupler (PC817)** | output | **18** | in | HIGH = selected feed is live; → PCF#2 P5 later (GPIO 35 = PSRAM on R8 boards — never used) |
 | **DHT11 outdoor** | DATA | **41** | in (one-wire) | v2.0.20 remap from 33 (header doesn't break out 22–34); north-side shade |
-| **DS1302 RTC** | RST / SCLK / I-O | **40 / 42 / 47** | 3-wire bit-bang | v2.0.21: date & time on the module's CR2032; VCC → 3V3, GND → GND, BZ unused; auto-detected |
+| **DS1307 RTC** | SDA / SCL | **8 / 9** (shared I2C0, 0x68) | I2C 100 kHz | v2.0.23: date & time on the module's coin cell; **VCC → 5V**, GND → GND; remove the module's 5 V pull-ups (R2/R3) or use a level shifter; auto-detected |
 | **BOOT button** (on the board) | — | **0** | in (pull-up) | short = start/stop, 2 s = power on |
 | **USB** | console/OTA | native USB | — | 115200 baud |
 
-Free pins on the S3: **3, 11** (21 = door, 40/42/47 = DS1302 RTC, 41 = DHT11, 48 = on-board pixel; no display in this build — the website is the screen). GPIO **35/36/37 = PSRAM on R8** boards — never wired. **45/46** strapping — keep free.
+Free pins on the S3: **3, 11, 40, 42, 47** (21 = door, 41 = DHT11, 48 = on-board pixel; the DS1307 RTC shares I2C0; no display in this build — the website is the screen). GPIO **35/36/37 = PSRAM on R8** boards — never wired. **45/46** strapping — keep free.
 
 ## 2. Master table — classic ESP32 DevKit V1 (30-pin)
 
@@ -85,7 +85,7 @@ beep, boot = silent). 10 kΩ pull-ups on all pins; ₹80, one chip cleans
 the whole panel loom, no timing-critical pin touched — frees
 6/7/38/15/16/39/18/21 as spares (33/34 aren't exposed on this header;
 and with no display in the build 3/11 are spare too —
-41 = DHT11, 48 = pixel; the DS1302 RTC is an S3-only part).
+41 = DHT11, 48 = pixel; the DS1307 RTC needs no pin of its own — it sits on the I2C bus, 21/22 on the classic).
 
 
 

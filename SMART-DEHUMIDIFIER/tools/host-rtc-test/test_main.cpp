@@ -1,9 +1,10 @@
+// Host test of src/rtc.cpp (DS1307 on I2C) against the fake chip in
+// mock_chip.cpp. Build + run: sh run.sh
 #include "Arduino.h"
+#include "Wire.h"
 #include "control.h"
 #include "rtc.h"
 void rtc_test_set_now(time_t t);
-#include <assert.h>
-#include <cstdlib>
 
 Settings cfg;
 
@@ -14,100 +15,132 @@ static time_t refEpoch(int y, int mo, int d, int h, int mi, int s) {
   return mktime(&t);   // TZ=UTC0 set in main
 }
 
-#define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #x); exit(1); } } while (0)
+#define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #x); \
+  for (int i_ = 0; i_ < 8; i_++) fprintf(stderr, "reg[%d]=0x%02X ", i_, gRtc.reg[i_]); \
+  fprintf(stderr, "\n"); exit(1); } } while (0)
+
+static void setTime(uint8_t s, uint8_t mi, uint8_t h, uint8_t dow, uint8_t d, uint8_t mo, uint8_t y) {
+  gRtc.reg[0] = s; gRtc.reg[1] = mi; gRtc.reg[2] = h; gRtc.reg[3] = dow;
+  gRtc.reg[4] = d; gRtc.reg[5] = mo; gRtc.reg[6] = y;
+}
+static void clearWriteLog() { memset(gRtc.writes, 0, sizeof gRtc.writes); }
+static int writesOutsideTime() { int n = 0; for (int r = 7; r < 64; r++) n += gRtc.writes[r]; return n; }
 
 int main() {
   setenv("TZ", "UTC0", 1);
   tzset();
   cfg.tzMinutes = 330;                    // IST = UTC+5:30
+  memset(&gRtc, 0, sizeof gRtc);
+  for (int r = 8; r < 64; r++) gRtc.reg[r] = (uint8_t)(0xA0 + r);   // user RAM
+  gRtc.reg[7] = 0x10;                     // control: SQWE set by someone else
+  time_t ep;
 
-  // ---- 1) readTime: chip holds LOCAL 2026-09-25 15:04:33 = 09:34:33 UTC
-  gChip.present = 1;
-  gChip.regs[0] = 0x33; gChip.regs[1] = 0x04; gChip.regs[2] = 0x0F;  // 15:04:33
-  gChip.regs[3] = 0x06; gChip.regs[4] = 0x25; gChip.regs[5] = 0x09; gChip.regs[6] = 0x26;
-  gChip.regs[7] = 0x00;
+  // ---- 1) detect + readTime: chip holds LOCAL 2026-09-25 15:04:33 (Fri)
+  gRtc.present = 1;
+  setTime(0x33, 0x04, 0x15, 0x06, 0x25, 0x09, 0x26);   // 24 h mode
   CHECK(rtc::begin());
   CHECK(rtc::present());
-  time_t ep;
   CHECK(rtc::readTime(&ep));
-  time_t want = refEpoch(2026, 9, 25, 9, 34, 33);
-  CHECK(ep == want);
-  printf("1) readTime: %ld == %ld  OK\n", (long)ep, (long)want);
+  CHECK(ep == refEpoch(2026, 9, 25, 9, 34, 33));
+  printf("1) detect + readTime (15:04:33 IST = 09:34:33 UTC)  OK\n");
 
-  // ---- 2) writeNow round-trip, WP set on the chip (must be cleared)
-  gChip.regs[7] = 0x80;                   // WP = 1 (mock enforces it!)
-  time_t t0 = refEpoch(2026, 9, 25, 10, 0, 0);   // UTC
+  // ---- 2) writeNow: BCD, 24 h mode, CH clear, day-of-week, round trip
+  clearWriteLog();
+  time_t t0 = refEpoch(2026, 9, 25, 10, 0, 0);          // UTC
   rtc_test_set_now(t0);
-  rtc::writeNow();
-  // local = 15:30:00 IST, Friday(6), 25-09-2026
-  { bool ok2 = (gChip.regs[0] == 0x00 && gChip.regs[1] == 0x30 && gChip.regs[2] == 0x15);
-    if (!ok2) { for (int i = 0; i < 8; i++) fprintf(stderr, "reg[%d]=0x%02X ", i, gChip.regs[i]);
-                fprintf(stderr, "ctrl=0x%02X\n", gChip.regs[7]); }
-    CHECK(ok2); }
-  CHECK(gChip.regs[3] == 0x06);           // Friday
-  CHECK(gChip.regs[4] == 0x25 && gChip.regs[5] == 0x09 && gChip.regs[6] == 0x26);
-  CHECK(gChip.regs[7] == 0x00);           // WP cleared
+  rtc::writeNow();                                      // local 15:30:00 Fri
+  CHECK(gRtc.reg[0] == 0x00 && gRtc.reg[1] == 0x30 && gRtc.reg[2] == 0x15);
+  CHECK((gRtc.reg[2] & 0x40) == 0);                     // 24-hour mode
+  CHECK(gRtc.reg[3] == 0x06);                           // Friday (1 = Sunday)
+  CHECK(gRtc.reg[4] == 0x25 && gRtc.reg[5] == 0x09 && gRtc.reg[6] == 0x26);
   CHECK(rtc::readTime(&ep) && ep == t0);
-  printf("2) writeNow round-trip (WP cleared)  OK\n");
+  printf("2) writeNow round-trip (24 h, CH clear, Friday)  OK\n");
 
-  // ---- 3) date crossing: UTC 2026-12-31 23:30 -> local 2027-01-01 05:00
+  // ---- 3) 20:00-23:59 - the hours the old DS1302 driver misread as 00-03
+  time_t t2 = refEpoch(2026, 9, 25, 18, 29, 59);        // local 23:59:59
+  rtc_test_set_now(t2);
+  rtc::writeNow();
+  CHECK(gRtc.reg[2] == 0x23 && gRtc.reg[1] == 0x59 && gRtc.reg[0] == 0x59);
+  CHECK(rtc::readTime(&ep) && ep == t2);
+  setTime(0x00, 0x15, 0x20, 0x06, 0x25, 0x09, 0x26);   // chip: 20:15:00
+  CHECK(rtc::readTime(&ep) && ep == refEpoch(2026, 9, 25, 14, 45, 0));
+  printf("3) late evening 23:59:59 + 20:15 read back exactly  OK\n");
+
+  // ---- 4) date + year crossing: UTC 2026-12-31 23:30 -> local 2027-01-01 05:00
   time_t t1 = refEpoch(2026, 12, 31, 23, 30, 0);
   rtc_test_set_now(t1);
   rtc::writeNow();
-  { bool ok3 = (gChip.regs[0] == 0x00 && gChip.regs[1] == 0x00 && gChip.regs[2] == 0x05);
-    if (!ok3) for (int i = 0; i < 8; i++) fprintf(stderr, "reg[%d]=0x%02X ", i, gChip.regs[i]);
-    if (!ok3) fprintf(stderr, "t1=%ld\n", (long)t1);
-    CHECK(ok3); }
-  CHECK(gChip.regs[4] == 0x01 && gChip.regs[5] == 0x01 && gChip.regs[6] == 0x27);
-  CHECK(gChip.regs[3] == 0x06);           // 2027-01-01 is also Friday
+  CHECK(gRtc.reg[0] == 0x00 && gRtc.reg[1] == 0x00 && gRtc.reg[2] == 0x05);
+  CHECK(gRtc.reg[4] == 0x01 && gRtc.reg[5] == 0x01 && gRtc.reg[6] == 0x27);
+  CHECK(gRtc.reg[3] == 0x06);                           // 2027-01-01 = Friday
   CHECK(rtc::readTime(&ep) && ep == t1);
-  printf("3) date-crossing  OK\n");
+  printf("4) date + year crossing  OK\n");
 
-  // ---- 4) factory-fresh: CH + WP set, garbage regs -> untrusted, then set
-  for (int i = 0; i < 8; i++) gChip.regs[i] = 0;
-  gChip.regs[0] = 0x80;                   // CH flag (seconds bit7)
-  gChip.regs[7] = 0x80;                   // WP
+  // ---- 5) factory-fresh: CH set (oscillator halted) -> untrusted until set
+  setTime(0x80 | 0x12, 0x34, 0x10, 0x03, 0x14, 0x05, 0x24);  // sane date, CH=1
   CHECK(rtc::begin());
   CHECK(rtc::present());
-  CHECK(!rtc::readTime(&ep));             // untrusted
-  CHECK(gChip.regs[7] == 0x00);           // begin() cleared WP
+  CHECK(!rtc::readTime(&ep));                           // halted = stale
+  CHECK(strstr(rtc::statusText(), "not set") != nullptr);
   rtc_test_set_now(t0);
   rtc::writeNow();
-  CHECK(gChip.regs[0] == 0x00);           // CH cleared by the burst write
+  CHECK((gRtc.reg[0] & 0x80) == 0);                     // CH cleared: ticking
   CHECK(rtc::readTime(&ep) && ep == t0);
-  printf("4) factory-fresh module  OK\n");
+  CHECK(strstr(rtc::statusText(), "DS1307 OK") != nullptr);
+  printf("5) factory-fresh module (CH set)  OK  [%s]\n", rtc::statusText());
 
-  // ---- 5) 12-hour mode on the chip: bit7 = mode, bit5 = AM/PM
-  gChip.regs[0] = 0x00; gChip.regs[1] = 0x30; gChip.regs[2] = 0xA3;  // 12h: 3:30 PM
-  gChip.regs[4] = 0x25; gChip.regs[5] = 0x09; gChip.regs[6] = 0x26;
-  gChip.regs[7] = 0x00;
+  // ---- 6) junk registers (CH clear) are rejected
+  setTime(0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x00);    // 2000-01-01 (reset state)
   CHECK(rtc::begin());
-  CHECK(rtc::readTime(&ep));
-  time_t want12 = refEpoch(2026, 9, 25, 10, 0, 0);  // 15:30 IST = 10:00 UTC
-  CHECK(ep == want12);
-  gChip.regs[2] = 0x8C;                             // 12h: 12:30 AM (midnight)
-  CHECK(rtc::readTime(&ep));
-  CHECK(ep == refEpoch(2026, 9, 24, 19, 0, 0));     // 00:30 IST = 19:00 UTC prev day
-  printf("5) 12-hour mode (PM + midnight)  OK\n");
+  CHECK(!rtc::readTime(&ep));                           // year 2000 = not a real time
+  setTime(0x4F, 0x30, 0x10, 0x02, 0x10, 0x10, 0x26);    // 0x4F = not BCD
+  CHECK(!rtc::readTime(&ep));
+  setTime(0x10, 0x30, 0x10, 0x02, 0x10, 0x13, 0x26);    // month 13
+  CHECK(!rtc::readTime(&ep));
+  setTime(0x10, 0x30, 0x24, 0x02, 0x10, 0x10, 0x26);    // 24:30
+  CHECK(!rtc::readTime(&ep));
+  printf("6) junk / reset-state registers rejected  OK\n");
 
-  // ---- 6) no chip
-  gChip.present = 0;
+  // ---- 7) 12-hour mode on the chip: bit6 = 12 h, bit5 = PM
+  setTime(0x00, 0x30, 0x40 | 0x20 | 0x03, 0x06, 0x25, 0x09, 0x26);   // 3:30 PM
+  CHECK(rtc::begin());
+  CHECK(rtc::readTime(&ep) && ep == refEpoch(2026, 9, 25, 10, 0, 0));
+  gRtc.reg[2] = 0x40 | 0x12;                            // 12:30 AM = 00:30
+  CHECK(rtc::readTime(&ep) && ep == refEpoch(2026, 9, 24, 19, 0, 0));
+  gRtc.reg[2] = 0x40 | 0x20 | 0x12;                     // 12:30 PM = noon
+  CHECK(rtc::readTime(&ep) && ep == refEpoch(2026, 9, 25, 7, 0, 0));
+  gRtc.reg[2] = 0x40 | 0x13;                            // "13" in 12 h mode = junk
+  CHECK(!rtc::readTime(&ep));
+  printf("7) 12-hour mode (PM, midnight, noon, junk)  OK\n");
+
+  // ---- 8) DS3231-style month register (bit7 = century flag) still reads
+  setTime(0x05, 0x04, 0x09, 0x06, 0x25, 0x80 | 0x09, 0x26);
+  CHECK(rtc::readTime(&ep) && ep == refEpoch(2026, 9, 25, 3, 34, 5));
+  printf("8) DS3231 century bit masked  OK\n");
+
+  // ---- 9) unset system clock is never pushed into the chip
+  clearWriteLog();
+  rtc_test_set_now(1000);
+  rtc::writeNow();
+  int total = 0; for (int r = 0; r < 64; r++) total += gRtc.writes[r];
+  CHECK(total == 0);
+  printf("9) unset system clock not written  OK\n");
+
+  // ---- 10) RAM (0x08-0x3F) + control (0x07) never touched
+  CHECK(gRtc.reg[7] == 0x10);
+  for (int r = 8; r < 64; r++) CHECK(gRtc.reg[r] == (uint8_t)(0xA0 + r));
+  CHECK(writesOutsideTime() == 0);
+  printf("10) control register + 56-byte RAM untouched  OK\n");
+
+  // ---- 11) no chip / 3.3 V-fed chip: NACK -> clean no-op
+  gRtc.present = 0;
   CHECK(!rtc::begin());
   CHECK(!rtc::present());
   CHECK(!rtc::readTime(&ep));
-  rtc::writeNow();                        // no-op
-  printf("6) no chip  OK  [%s]\n", rtc::statusText());
-
-  // ---- 7) RAM byte 0 must survive begin()'s probe untouched
-  gChip.present = 1;
-  for (int i = 0; i < 8; i++) gChip.regs[i] = 0;
-  gChip.regs[0] = 0x30; gChip.regs[1] = 0x00; gChip.regs[2] = 0x00;
-  gChip.regs[4] = 0x25; gChip.regs[5] = 0x09; gChip.regs[6] = 0x26;
-  gChip.ram[0] = 0x5A;                            // pre-existing user data
-  CHECK(rtc::begin());
-  CHECK(rtc::present());
-  CHECK(gChip.ram[0] == 0x5A);                    // restored after the probe
-  printf("7) RAM byte preserved through probe  OK\n");
+  rtc_test_set_now(t0);
+  rtc::writeNow();                                      // must not crash / write
+  CHECK(strstr(rtc::statusText(), "no DS1307 at 0x68") != nullptr);
+  printf("11) no chip  OK  [%s]\n", rtc::statusText());
 
   printf("\nALL RTC TESTS PASSED\n");
   return 0;

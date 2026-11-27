@@ -91,9 +91,13 @@ static bool pinUsed(int p) {
     PIN_LOAD_RELAY, PIN_BYPASS_CTRL, PIN_SUPPLY_CH1, PIN_SUPPLY_CH2,
     PIN_SOLAR_TOGGLE, PIN_SUPPLY_OPTO,
     PIN_BTN1, PIN_BTN2, PIN_POWER_HOLD, PIN_BUZZER, PIN_PIXEL,
+#if DISPLAY_ENABLED          // v2.0.23: a compiled-out module owns no pads,
     PIN_TFT_SCK, PIN_TFT_MOSI, PIN_TFT_CS, PIN_TFT_DC, PIN_TFT_RST,
+#endif                       // so its spare pins get parked like the rest
     PIN_SCALE_CLK, PIN_SCALE_DOUT, PIN_DOOR_LOCK, PIN_DOOR_REED,
+#if TXDISP_ENABLED           // (S3: 3 + 40/42/47 were left floating)
     PIN_TXDISP_TX,
+#endif
     PIN_DHT22_CHAMBER, PIN_DHT11_OUT,
 #ifdef PIN_BTN
     PIN_BTN,
@@ -120,6 +124,7 @@ static void pinsUnusedSafe() {
     pinMode(p, INPUT_PULLDOWN); parked++;                   // v2.0.18: DISABLED
 #else
     if (p == 1 || p == 3) continue;                         // UART0 = console
+    if (p == 0) continue;                                   // boot strap
     if (p >= 6 && p <= 11) continue;                        // flash
     if (p == 20 || p == 24 || (p >= 28 && p <= 31)) continue; // not bonded
     if (p >= 34) { pinMode(p, INPUT); continue; }           // input-only pads
@@ -402,6 +407,26 @@ static void initSystem() {
 #endif
 
   printBanner();
+  delay(200);
+
+  // 2. settings + subsystems
+  cfg = loadSettings();
+  Serial.printf("[cfg] setTemp=%.1fC max=%.0fC RH %0.f-%0.f%% time=%umin\n",
+                cfg.setTemp, cfg.maxTemp, cfg.humLow, cfg.humHigh,
+                (unsigned)cfg.dryMinutes);
+
+  sensors.begin();
+  Serial.printf("[sens] S1(top)=%s  S2(bottom)=%s\n",
+                sensors.s1ok() ? "OK" : "MISSING",
+                sensors.s2ok() ? "OK" : "MISSING");
+
+  battery.begin();
+  battery.setType(cfg.battType);
+  Serial.printf("[batt] %.2f V (%u%%)\n", battery.volts(), battery.percent());
+
+  dryer.begin(cfg);
+
+  // 3. cycle history (LittleFS) - first boot formats, takes a few seconds
   cyclelog::begin();
   Serial.println("[hist] cycle storage ready");
 
@@ -458,7 +483,8 @@ static void initSystem() {
                 PIN_SUPPLY_OPTO >= 0 ? "fitted" : "absent",
                 supply::latched() ? "latch ok" : "no latch (USB power?)");
 #if RTC_ENABLED
-  Serial.printf("[diag] %s\n", rtc::statusText());
+  rtc::begin();                    // detect the DS1307 (I2C0 @ 0x68) BEFORE
+  Serial.printf("[diag] %s\n", rtc::statusText());   // reporting it
 #endif
 
   // v2.0: INITIALISATION WINDOW - every output stays LOW, the splash
@@ -488,12 +514,12 @@ static void initSystem() {
   display::splash(false);         // hand over to the main screen
   Serial.println(F("[init] initialisation + calibration checks complete - starting"));
 
-  // 3c. DS1302 RTC (v2.0.21): coin-cell date & time that survives a
-  // FULL power-down. Runs BEFORE web::begin() so a good RTC time wins
-  // over the (stale) NVS restore - clockBoot() then sees a live clock
-  // and backs off. No chip / untrusted time = today's phone-sync clock.
+  // 3c. DS1307 RTC (v2.0.23; DS1302 in v2.0.21-22): coin-cell date & time
+  // that survives a FULL power-down. Detected in the self-test above;
+  // restored here, BEFORE web::begin(), so a good RTC time wins over the
+  // (stale) NVS restore - clockBoot() then sees a live clock and backs
+  // off. No chip / untrusted time = today's phone-sync clock.
 #if RTC_ENABLED
-  rtc::begin();
   {
     time_t rtcEp = 0;
     if (rtc::readTime(&rtcEp)) {
